@@ -1,0 +1,25 @@
+{
+  "name": "@codemeet/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint": "./eslint.mjs",
+    "./tsconfig/base": "./tsconfig/base.json",
+    "./tsconfig/node": "./tsconfig/node.json",
+    "./tsconfig/next": "./tsconfig/next.json"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix --max-warnings=0"
+  },
+  "dependencies": {
+    "@eslint/js": "9.39.5",
+    "globals": "17.13.0",
+    "typescript-eslint": "8.71.0"
+  },
+  "peerDependencies": {
+    "eslint": "^9.39.5",
+    "typescript": "^5.9.3"
+  }
+}

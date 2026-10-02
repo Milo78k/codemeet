@@ -1,0 +1,2 @@
+# Keep this file in version control with the migration history.
+provider = "postgresql"

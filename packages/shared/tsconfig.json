@@ -1,0 +1,12 @@
+{
+  "extends": "@codemeet/config/tsconfig/node",
+  "compilerOptions": {
+    "types": [],
+    "composite": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

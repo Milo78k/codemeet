@@ -1,0 +1,133 @@
+fragment InterviewFields on Interview {
+  id
+  title
+  status
+  createdAt
+  updatedAt
+  startedAt
+  finishedAt
+  createdBy {
+    id
+    name
+    email
+  }
+  activeQuestion {
+    ...QuestionFields
+  }
+  questions {
+    id
+    order
+    snapshotTitle
+    snapshotDescription
+    snapshotDifficulty
+    snapshotLanguage
+    snapshotStarterCode
+    snapshotCapturedAt
+    question {
+      ...QuestionFields
+    }
+  }
+  participants {
+    id
+    interviewId
+    displayName
+    role
+    joinedAt
+    user {
+      id
+      name
+      email
+    }
+  }
+}
+
+query GetGuestInvite($inviteToken: String!) {
+  guestInvite(inviteToken: $inviteToken) {
+    state
+    interviewTitle
+    expiresAt
+  }
+}
+
+query GetCurrentParticipant {
+  currentParticipant {
+    id
+    interviewId
+    displayName
+    role
+    joinedAt
+  }
+}
+
+mutation CreateGuestInvite($interviewId: ID!) {
+  createGuestInvite(interviewId: $interviewId) {
+    token
+    interviewId
+    expiresAt
+  }
+}
+
+mutation JoinInterview($inviteToken: String!, $displayName: String!) {
+  joinInterview(inviteToken: $inviteToken, displayName: $displayName) {
+    interviewId
+    participantSessionToken
+    participantSessionExpiresAt
+    participant {
+      id
+      interviewId
+      displayName
+      role
+      joinedAt
+    }
+  }
+}
+
+query GetInterviews($status: InterviewStatus, $limit: Int = 6, $offset: Int = 0) {
+  interviews(status: $status, limit: $limit, offset: $offset) {
+    items {
+      ...InterviewFields
+    }
+    pageInfo {
+      limit
+      offset
+      totalCount
+      hasNextPage
+    }
+  }
+}
+
+query GetInterview($id: ID!) {
+  interview(id: $id) {
+    ...InterviewFields
+  }
+}
+
+mutation CreateInterview($input: CreateInterviewInput!) {
+  createInterview(input: $input) {
+    ...InterviewFields
+  }
+}
+
+mutation AddQuestionToInterview($interviewId: ID!, $questionId: ID!, $order: Int) {
+  addQuestionToInterview(interviewId: $interviewId, questionId: $questionId, order: $order) {
+    ...InterviewFields
+  }
+}
+
+mutation StartInterview($interviewId: ID!) {
+  startInterview(interviewId: $interviewId) {
+    ...InterviewFields
+  }
+}
+
+mutation FinishInterview($interviewId: ID!) {
+  finishInterview(interviewId: $interviewId) {
+    ...InterviewFields
+  }
+}
+
+mutation SetActiveQuestion($interviewId: ID!, $questionId: ID!) {
+  setActiveQuestion(interviewId: $interviewId, questionId: $questionId) {
+    ...InterviewFields
+  }
+}

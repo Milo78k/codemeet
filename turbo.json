@@ -1,0 +1,44 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "tasks": {
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": [
+        "API_HOST",
+        "API_PORT",
+        "DATABASE_URL",
+        "DEMO_AUTH_ENABLED",
+        "NODE_ENV",
+        "CORS_ALLOWED_ORIGINS",
+        "NEXT_PUBLIC_GRAPHQL_URL",
+        "NEXT_PUBLIC_REALTIME_URL"
+      ]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.env*",
+        "$TURBO_ROOT$/apps/api/src/graphql/schema.graphql"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "public/monaco/**"],
+      "env": ["NEXT_PUBLIC_GRAPHQL_URL", "NEXT_PUBLIC_REALTIME_URL"]
+    },
+    "lint": {},
+    "lint:fix": {
+      "cache": false
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/src/graphql/schema.graphql"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "passThroughEnv": ["TEST_DATABASE_URL", "DATABASE_URL", "NODE_ENV"],
+      "outputs": []
+    }
+  }
+}

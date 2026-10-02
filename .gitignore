@@ -1,0 +1,16 @@
+node_modules/
+.pnpm-store/
+.cache/
+.turbo/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+!.env.*.example
+.DS_Store
+packages/db/src/generated/
+apps/web/public/monaco/

@@ -1,0 +1,223 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum InterviewStatus {
+  DRAFT
+  READY
+  IN_PROGRESS
+  FINISHED
+}
+
+enum ParticipantRole {
+  INTERVIEWER
+  CANDIDATE
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ProgrammingLanguage {
+  JAVASCRIPT
+  TYPESCRIPT
+  REACT_TSX
+}
+
+enum CodeRunStatus {
+  SUCCESS
+  FAILED
+  ERROR
+}
+
+enum InterviewEventType {
+  INTERVIEW_CREATED
+  INTERVIEW_STARTED
+  QUESTION_CHANGED
+  CANDIDATE_JOINED
+  INTERVIEW_FINISHED
+  CODE_RUN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdQuestions  Question[]
+  createdInterviews Interview[]
+  participants      InterviewParticipant[]
+  notes             InterviewNote[]
+}
+
+model Interview {
+  id               String          @id @default(cuid())
+  title            String
+  status           InterviewStatus @default(DRAFT)
+  createdById      String
+  // The composite relation below requires the active question to be attached here.
+  activeQuestionId String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  createdBy               User                   @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  activeQuestion          Question?              @relation("ActiveQuestion", fields: [activeQuestionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  activeInterviewQuestion InterviewQuestion?     @relation("ActiveInterviewQuestion", fields: [id, activeQuestionId], references: [interviewId, questionId], onDelete: Restrict, onUpdate: Cascade, map: "Interview_activeQuestion_membership_fkey")
+  participants            InterviewParticipant[]
+  questions               InterviewQuestion[]
+  guestTokens             GuestToken[]
+  codeRuns                CodeRun[]
+  notes                   InterviewNote[]
+  events                  InterviewEvent[]
+
+  @@index([status])
+  @@index([createdById])
+}
+
+model InterviewParticipant {
+  id          String          @id @default(cuid())
+  interviewId String
+  userId      String?
+  displayName String
+  // SQL requires a User for INTERVIEWER and permits only one CANDIDATE per interview.
+  role        ParticipantRole
+  joinedAt    DateTime        @default(now())
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  codeRuns  CodeRun[]
+  sessions  ParticipantSession[]
+
+  @@unique([interviewId, userId])
+  // Supports the SQL composite FK that keeps CodeRun actors in the same interview.
+  @@unique([interviewId, id])
+}
+
+model ParticipantSession {
+  id            String    @id @default(cuid())
+  participantId String
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  revokedAt     DateTime?
+
+  participant InterviewParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([participantId, expiresAt])
+}
+
+model Question {
+  id          String              @id @default(cuid())
+  title       String
+  description String
+  difficulty  QuestionDifficulty
+  language    ProgrammingLanguage
+  starterCode String
+  createdById String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  interviewQuestions InterviewQuestion[]
+  codeRuns           CodeRun[]
+  activeInInterviews Interview[]         @relation("ActiveQuestion")
+
+  @@index([createdById])
+}
+
+model InterviewQuestion {
+  id          String @id @default(cuid())
+  interviewId String
+  questionId  String
+  // The migration enforces order >= 0 with a CHECK constraint.
+  order       Int
+
+  // Captured together when the interview starts. Legacy started interviews keep
+  // null: the historical source version cannot be recovered from Question.
+  snapshotTitle       String?
+  snapshotDescription String?
+  snapshotDifficulty  QuestionDifficulty?
+  snapshotLanguage    ProgrammingLanguage?
+  snapshotStarterCode String?
+  snapshotCapturedAt  DateTime?
+
+  // This edge belongs to the interview; deleting a question must preserve history.
+  interview          Interview   @relation(fields: [interviewId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  question           Question    @relation(fields: [questionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  activeInInterviews Interview[] @relation("ActiveInterviewQuestion")
+  codeRuns           CodeRun[]
+
+  @@unique([interviewId, questionId])
+  // Both unique indexes start with interviewId and cover ordered interview lookups.
+  @@unique([interviewId, order])
+}
+
+model GuestToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  interviewId String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+}
+
+model CodeRun {
+  id                     String        @id @default(cuid())
+  interviewId            String
+  questionId             String
+  codeSnapshot           String
+  status                 CodeRunStatus
+  stdout                 String?
+  stderr                 String?
+  durationMs             Int?
+  // Composite relations below keep the task and optional actor in this interview.
+  createdByParticipantId String?
+  createdAt              DateTime      @default(now())
+
+  interview            Interview             @relation(fields: [interviewId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  question             Question              @relation(fields: [questionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  interviewQuestion    InterviewQuestion     @relation(fields: [interviewId, questionId], references: [interviewId, questionId], onDelete: Restrict, onUpdate: Cascade, map: "CodeRun_question_membership_fkey")
+  createdByParticipant InterviewParticipant? @relation(fields: [interviewId, createdByParticipantId], references: [interviewId, id], onDelete: Restrict, onUpdate: Cascade, map: "CodeRun_participant_membership_fkey")
+
+  @@index([interviewId, createdAt])
+}
+
+model InterviewNote {
+  id          String   @id @default(cuid())
+  interviewId String
+  authorId    String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  // Interviewer ownership is checked by the future note service before writes.
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+}
+
+model InterviewEvent {
+  id          String             @id @default(cuid())
+  interviewId String
+  type        InterviewEventType
+  payload     Json               @db.JsonB
+  createdAt   DateTime           @default(now())
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([interviewId, createdAt])
+}

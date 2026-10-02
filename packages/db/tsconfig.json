@@ -1,0 +1,7 @@
+{
+  "extends": "@codemeet/config/tsconfig/node",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "prisma.config.ts"]
+}

@@ -1,0 +1,170 @@
+enum InterviewStatus {
+  DRAFT
+  READY
+  IN_PROGRESS
+  FINISHED
+}
+
+enum ParticipantRole {
+  INTERVIEWER
+  CANDIDATE
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ProgrammingLanguage {
+  JAVASCRIPT
+  TYPESCRIPT
+  REACT_TSX
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Question {
+  id: ID!
+  title: String!
+  description: String!
+  difficulty: QuestionDifficulty!
+  language: ProgrammingLanguage!
+  starterCode: String!
+  createdBy: User
+  createdAt: String!
+  updatedAt: String!
+}
+
+type InterviewQuestion {
+  id: ID!
+  order: Int!
+  question: Question!
+  snapshotTitle: String
+  snapshotDescription: String
+  snapshotDifficulty: QuestionDifficulty
+  snapshotLanguage: ProgrammingLanguage
+  snapshotStarterCode: String
+  snapshotCapturedAt: String
+}
+
+type InterviewParticipant {
+  id: ID!
+  interviewId: ID!
+  displayName: String!
+  role: ParticipantRole!
+  user: User
+  joinedAt: String!
+}
+
+type Interview {
+  id: ID!
+  title: String!
+  status: InterviewStatus!
+  createdBy: User
+  activeQuestion: Question
+  questions: [InterviewQuestion!]!
+  participants: [InterviewParticipant!]!
+  startedAt: String
+  finishedAt: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+enum GuestInviteState {
+  VALID
+  EXPIRED
+  USED
+  INTERVIEW_FINISHED
+  INVALID
+}
+
+type GuestInvitePreview {
+  state: GuestInviteState!
+  interviewTitle: String
+  expiresAt: String
+}
+
+type GuestInvite {
+  token: String!
+  interviewId: ID!
+  expiresAt: String!
+}
+
+type JoinInterviewPayload {
+  interviewId: ID!
+  participant: InterviewParticipant!
+  participantSessionToken: String!
+  participantSessionExpiresAt: String!
+}
+
+type PageInfo {
+  limit: Int!
+  offset: Int!
+  totalCount: Int!
+  hasNextPage: Boolean!
+}
+
+type QuestionPage {
+  items: [Question!]!
+  pageInfo: PageInfo!
+}
+
+type InterviewPage {
+  items: [Interview!]!
+  pageInfo: PageInfo!
+}
+
+input CreateQuestionInput {
+  title: String!
+  description: String!
+  difficulty: QuestionDifficulty!
+  language: ProgrammingLanguage!
+  starterCode: String!
+}
+
+input UpdateQuestionInput {
+  title: String
+  description: String
+  difficulty: QuestionDifficulty
+  language: ProgrammingLanguage
+  starterCode: String
+}
+
+input CreateInterviewInput {
+  title: String!
+}
+
+type Query {
+  health: String!
+  guestInvite(inviteToken: String!): GuestInvitePreview!
+  currentParticipant: InterviewParticipant
+  questions(
+    search: String
+    language: ProgrammingLanguage
+    difficulty: QuestionDifficulty
+    limit: Int = 20
+    offset: Int = 0
+  ): QuestionPage!
+  question(id: ID!): Question
+  interviews(status: InterviewStatus, limit: Int = 20, offset: Int = 0): InterviewPage!
+  interview(id: ID!): Interview
+}
+
+type Mutation {
+  createGuestInvite(interviewId: ID!): GuestInvite!
+  joinInterview(inviteToken: String!, displayName: String!): JoinInterviewPayload!
+  createQuestion(input: CreateQuestionInput!): Question!
+  updateQuestion(id: ID!, input: UpdateQuestionInput!): Question!
+  createInterview(input: CreateInterviewInput!): Interview!
+  addQuestionToInterview(interviewId: ID!, questionId: ID!, order: Int): Interview!
+  setActiveQuestion(interviewId: ID!, questionId: ID!): Interview!
+  startInterview(interviewId: ID!): Interview!
+  finishInterview(interviewId: ID!): Interview!
+}

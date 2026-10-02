@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+.cache/
+.turbo/
+.next/
+dist/
+coverage/
+pnpm-lock.yaml
+next-env.d.ts
+packages/db/src/generated/
+apps/web/src/shared/api/generated/
+apps/web/public/monaco/

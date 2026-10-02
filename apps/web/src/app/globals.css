@@ -1,0 +1,61 @@
+:root {
+  color-scheme: light;
+  --background: #f8f9f7;
+  --foreground: #222a24;
+  --muted: #71796f;
+  --accent: #256349;
+  --border: #e4e8e1;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.5;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+::selection {
+  background: #d9ead8;
+}
+:focus-visible {
+  outline: 3px solid #87b49b;
+  outline-offset: 3px;
+}
