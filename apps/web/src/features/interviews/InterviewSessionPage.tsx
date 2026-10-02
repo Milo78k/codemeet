@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { invalidateInterviewLists } from '../../shared/api/cache';
 import { getErrorMessage } from '../../shared/api/errors';
@@ -17,6 +17,7 @@ import { EmptyState, ErrorNotice, LoadingState } from '../../shared/ui/Feedback'
 import styles from '../../shared/ui/workspace.module.css';
 import { ActiveInterviewQuestion } from './ActiveInterviewQuestion';
 import { useInterviewDraftStore } from './editor/draft-store';
+import type { ParticipantIdentity } from './editor/presence';
 import { FinishInterviewDialog } from './FinishInterviewDialog';
 import { InterviewQuestionList } from './InterviewQuestionList';
 import { InterviewSessionHeader } from './InterviewSessionHeader';
@@ -44,6 +45,24 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
   });
   const interview = data?.interview;
   const candidate = currentParticipant.data?.currentParticipant ?? null;
+  const interviewer = interview?.participants.find(
+    (participant) => participant.role === 'INTERVIEWER',
+  );
+  const activeParticipant = candidate ?? interviewer ?? null;
+  const participantId = activeParticipant?.id;
+  const participantName = activeParticipant?.displayName;
+  const participantRole = activeParticipant?.role;
+  const identity = useMemo<ParticipantIdentity | null>(
+    () =>
+      participantId && participantName && participantRole
+        ? {
+            participantId,
+            displayName: participantName,
+            role: participantRole,
+          }
+        : null,
+    [participantId, participantName, participantRole],
+  );
   const canManage = !candidate;
   const busy = switching.loading || finishing.loading;
   const activeEntry = interview?.questions.find(
@@ -186,10 +205,12 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
         />
         {activeSnapshot && activeEntry ? (
           <ActiveInterviewQuestion
+            key={activeEntry.id}
             snapshot={activeSnapshot}
             interviewId={interview.id}
             interviewQuestionId={activeEntry.id}
             drafts={drafts}
+            identity={identity}
           />
         ) : (
           <div className={styles.sessionBrokenContent}>

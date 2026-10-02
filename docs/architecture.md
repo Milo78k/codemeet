@@ -2,9 +2,9 @@
 
 ## Статус документа
 
-**PHASE 6:** кандидат открывает одноразовую invite ссылку, получает ограниченную participant identity, затем подключается к своей Interview Session. GraphQL и WebSocket проверяют bearer session, role и membership; Yjs комнаты по-прежнему in-memory. TEMP DEMO AUTH для interviewer остаётся общей локальной личностью. Presence/cursors, durable Yjs persistence и code execution не реализованы. Результаты и ограничения проверок: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md).
+**PHASE 7:** interviewer и candidate входят в авторизованную комнату активного InterviewQuestion. GraphQL обслуживает business state, Y.Doc/Y.Text — общий исходный код, а Awareness — только эфемерное presence/cursor/selection состояние. Сервер связывает participant identity с проверенным WebSocket и переписывает Awareness metadata перед broadcast. TEMP DEMO AUTH для interviewer остаётся общей локальной личностью; durable Yjs persistence и code execution ещё не реализованы. Результаты и ограничения проверок: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md).
 
-## Реализованный pipeline PHASE 2–6
+## Реализованный pipeline PHASE 2–7
 
 ```mermaid
 flowchart LR
@@ -14,7 +14,7 @@ flowchart LR
   subgraph API["apps/api: один Node.js HTTP server"]
     Yoga["GraphQL Yoga /graphql"] --> Resolvers["Тонкие resolvers"]
     Resolvers --> Services["Services: Zod, ownership, transactions"]
-    Realtime["WS /collaboration: auth first, then Yjs"] --> Rooms["In-memory Y.Doc registry"]
+    Realtime["WS /collaboration: auth, Yjs + Awareness"] --> Rooms["In-memory Y.Doc + Awareness registry"]
     Realtime -->|"upgrade на том же HTTP server"| Yoga
   end
   Services --> Prisma["packages/db: Prisma Client"]
@@ -27,7 +27,7 @@ SDL находится в `apps/api/src/graphql/schema.graphql`. Resolvers вы�
 
 Доступны queries `health`, `questions`, `question`, `interviews`, `interview` и mutations `createQuestion`, `updateQuestion`, `createInterview`, `addQuestionToInterview`, `setActiveQuestion`, `startInterview`, `finishInterview`. Tokens, notes и runs пока имеют только persistence models; соответствующих API операций ещё нет.
 
-## Frontend PHASE 2–6
+## Frontend PHASE 2–7
 
 ### Client boundary и fetching
 
@@ -90,14 +90,36 @@ Production и настоящий development StrictMode smoke проверили
 
 ```mermaid
 flowchart LR
-  Model["Existing Monaco Model"] <--> Binding["y-monaco: future MonacoBinding"]
+  Model["Existing Monaco Model"] <--> Binding["y-monaco MonacoBinding + Awareness"]
   Binding <--> YText["Y.Text: code"]
   YText <--> Provider["y-websocket client"]
   Provider <-->|"/collaboration"| Server["apps/api y-protocols adapter"]
   Server <--> Room["In-memory Y.Doc"]
 ```
 
-`onEditorReady({ editor, monaco, model })` подключает y-monaco binding к текущей stable model; cleanup вызывается при смене question/editor и unmount. Frontend provider отключает BroadcastChannel, чтобы browser-to-browser проверки проходили через API. API валидирует origin, room ID, существование snapshot и `IN_PROGRESS`; production user/participant authorization ещё не реализована. Используются y-websocket client и стандартный y-protocols/lib0 wire protocol; собственный CRDT не создавался. Awareness/cursors, durable save mutations и CodeRunner не входят в PHASE 5.
+`onEditorReady({ editor, monaco, model })` подключает y-monaco binding к текущей stable model; cleanup вызывается при смене question/editor и unmount. Frontend provider отключает BroadcastChannel, поэтому клиенты обмениваются состоянием через API WebSocket. PHASE 5 добавила Yjs документ; PHASE 6 добавила origin/session/membership авторизацию; PHASE 7 подключила Awareness, описанный ниже. Используются y-websocket client и стандартные y-protocols/lib0 wire protocols; собственный CRDT не создавался. Durable save mutations и CodeRunner ещё не реализованы.
+
+### Ephemeral Awareness и participant presence — PHASE 7
+
+```mermaid
+flowchart LR
+  React["React / Apollo: business state"] <-->|"GraphQL"| API["apps/api"]
+  Monaco["Monaco editor"] <-->|"y-monaco binding"| Text["Y.Text: code"]
+  Text <--> Doc["Y.Doc: in-memory room"]
+  Doc <-->|"authorized WebSocket sync"| API
+  Cursor["Cursor / selection / participant metadata"] <--> Awareness["Yjs Awareness: ephemeral"]
+  Awareness <-->|"authorized WebSocket Awareness frame"| API
+```
+
+Эти каналы имеют разные источники истины. Apollo/GraphQL хранит business state и управляет статусом интервью и active question. Y.Doc/Y.Text содержит общий код текущего InterviewQuestion. Awareness содержит только `user: { participantId, displayName, role }` и относительную позицию редакторского selection. Awareness не попадает в PostgreSQL, Apollo cache, InterviewEvent или persistent Y.Doc; работа presence не меняет dirty state, которое по-прежнему сравнивает Y.Text с snapshot starter code.
+
+Room identity — пара Interview ID + InterviewQuestion ID. Presence относится только к этой активной Question room: участник на другой задаче не отображается в списке или курсорах. Session показывает компактный список Participants с именем и ролью; вкладки одного participant дедуплицируются по participantId. Если один participant открыл несколько вкладок, каждая авторизованная вкладка может показывать собственный remote cursor, но список содержит человека один раз. Интервьюер и кандидат получают один стабильный цвет из ограниченной палитры через детерминированный hash participantId.
+
+Перед обработкой Awareness update API использует `modifyAwarenessUpdate`: любые присланные клиентом user/id/role и произвольные поля удаляются, после чего добавляется identity из уже авторизованного соединения. Один WebSocket может владеть одним Awareness client ID; сервер отвергает попытку перехватить ID другой вкладки. Для cursor принимаются только корректные Yjs relative positions к `Y.Text("code")`; name передаётся в Monaco как injected text, без HTML. y-monaco 0.1.6 сам конвертирует Monaco selection в relative positions и рисует selection; дополнительная Monaco decoration показывает colored caret и безопасную текстовую подпись.
+
+Provider отключает BroadcastChannel (`disableBc: true`), чтобы presence, курсоры и документ шли через авторизованный WebSocket. При разрыве стандартные Awareness removal/timeout протокола убирают участника; y-websocket переподключается и снова отправляет локальный state. При question switch старая binding/provider уничтожаются, а новая активная room публикует identity заново. Отложенный room release сохраняет StrictMode mount/unmount/mount поведение без второго provider или ghost local participant.
+
+`setActiveQuestion` остаётся GraphQL mutation. Presence не является business event channel: автоматическое переключение candidate при смене activeQuestion другим клиентом не реализовано, candidate должен обновить Session. Already-open connections не получают мгновенный finish/revoke event от другого процесса; эти ограничения, TEMP DEMO AUTH и in-memory Y.Doc описаны в [PHASE 7 report](phase-7-report.md).
 
 Форма задачи проверяет title 1–200 после trim, description 1–20 000 и starter code до 100 000 символов; starter code сохраняет whitespace и допускает пустое значение. После `CreateQuestion` выполняется переход в `/questions?created=1`. Interview form требует title и хотя бы одну selected question. Labels связаны с inputs, field errors используют `aria-invalid`/`aria-describedby`; mutation buttons отключаются и показывают progress text. Начальная загрузка списков использует компактное loading state, а Load more сохраняет уже показанные записи.
 
@@ -260,13 +282,13 @@ PHASE 3 добавляет integration cases для snapshot-at-start, акту�
 ```mermaid
 flowchart LR
   Browser["Browser: Next.js UI, Apollo, Monaco"] -->|"GraphQL: persistent business state"| Yoga
-  Browser <-->|"Yjs binary protocol"| Collaboration
-  Browser <-->|"Business events"| Events
+  Browser <-->|"Yjs sync + Awareness"| Collaboration
+  Browser <-->|"Business events: planned"| Events
   Browser -->|"Run выбранного snapshot"| Sandbox["Sandpack: отдельный iframe origin"]
   subgraph API["apps/api: один Node.js процесс"]
     Yoga["GraphQL Yoga"] --> Services["Domain services и authorization"]
-    Collaboration["WS /collaboration"] --> Rooms["Room registry: Y.Doc"]
-    Events["WS /events"]
+    Collaboration["WS /collaboration"] --> Rooms["Room registry: Y.Doc + Awareness"]
+    Events["WS /events: planned"]
     Services --> Rooms
     Services -->|"После commit"| Events
     Rooms --> Persistence["Document persistence"]
@@ -346,15 +368,15 @@ Candidate получает только собственный interview, immuta
 
 ## Business events и durable state — план следующих фаз
 
-PHASE 5 реализует один WebSocket route `/collaboration` для Yjs documents; PHASE 6 защищает handshake candidate/interviewer identity. Business events route `/events`, recovery API, durable document persistence и presence ещё не реализованы. Следующие требования относятся к будущим фазам.
+PHASE 5 реализует один WebSocket route `/collaboration` для Yjs documents; PHASE 6 защищает handshake candidate/interviewer identity; PHASE 7 добавляет эфемерное Awareness presence. Business events route `/events`, recovery API и durable document persistence относятся к будущим фазам.
 
 GraphQL отвечает за вопросы, интервью, участников, notes, runs и события. Сложные операции выполняют сервисы; resolvers переводят входные данные и вызывают их. Backend валидирует input независимо от Zod на frontend.
 
-Yjs отвечает только за collaborative content. `Interview.status`, активная задача и права остаются серверным business state. PHASE 5 синхронизирует Y.Doc/Y.Text через y-websocket protocol; PHASE 6 проверяет participant identity/membership до Yjs sync. Rooms и documents по-прежнему живут в памяти API, поэтому restart API теряет текущие edits.
+Y.Doc/Y.Text отвечает только за collaborative code. `Interview.status`, активная задача и права остаются серверным business state. Awareness передаёт эфемерные user metadata, cursor и selection для текущей Question room, но не меняет Y.Text и не сохраняется. PHASE 6 проверяет participant identity/membership до Yjs sync; PHASE 7 серверно связывает identity с authorized WebSocket до принятия Awareness. Rooms и documents по-прежнему живут в памяти API, поэтому restart API теряет текущие edits.
 
 В одном WebSocket server используются отдельные маршруты:
 
-- `/collaboration` — binary protocol y-websocket: Y.Doc и Awareness protocol support;
+- `/collaboration` — binary protocol y-websocket: Y.Doc sync и question-scoped Awareness;
 - `/events` — небольшой JSON protocol для `QUESTION_CHANGED`, `INTERVIEW_FINISHED`, `CODE_RUN_RESULT`, `PARTICIPANT_JOINED` и других бизнес-уведомлений.
 
 Это два соединения с одной серверной инфраструктурой. JSON не добавляется внутрь стандартного y-websocket protocol. GraphQL subscriptions и отдельный broker в MVP не требуются.
@@ -417,10 +439,10 @@ API не исполняет пользовательский JavaScript чере
 | 4    | Реализован: Monaco Editor, локальные per-question drafts, language/models lifecycle и confirmed Reset    |
 | 5    | Реализован: Yjs/WebSocket collaborative editing, per-question rooms, статус соединения и shared Reset    |
 | 6    | Реализован: guest invite/session, candidate GraphQL scope и авторизованный Yjs WS handshake              |
-| 7    | Presence, Awareness, remote cursors и removal после disconnect                                           |
+| 7    | Завершён: question-scoped presence, Awareness identity, remote cursors/selections и cleanup              |
 | 8    | Sandpack adapter, immutable run snapshots, shared results и runtime limits                               |
 | 9    | Private notes, timeline, finish sequencing и result page                                                 |
 | 10   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
 | 11   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
 
-Проверки добавляются вместе с поведением, а не откладываются целиком до PHASE 10. PHASE 6 добавляет guest/auth integration suite; полный запуск зависит от PostgreSQL и корректного package-manager/runtime окружения. Durable Yjs persistence, business events, presence и interviewer login остаются будущей работой. Commit и push не выполнялись; PHASE 7 не начиналась.
+Проверки добавляются вместе с поведением, а не откладываются целиком до PHASE 10. PHASE 6/7 добавили authorization и ephemeral collaboration tests; DB-backed suites зависят от PostgreSQL и корректного package-manager/runtime окружения. Durable Yjs persistence, business events и interviewer login остаются будущей работой. Browser smoke PHASE 7 пропущен, так как доступный in-app browser runtime не предоставил браузерных контекстов. Commit и push не выполнялись.

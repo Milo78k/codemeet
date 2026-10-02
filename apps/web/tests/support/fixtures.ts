@@ -61,7 +61,17 @@ export function interview(
       snapshotCapturedAt: started ? createdAt : null,
       question: item,
     })),
-    participants: [],
+    participants: [
+      {
+        __typename: 'InterviewParticipant',
+        id: `interviewer-${id}`,
+        interviewId: id,
+        displayName: 'Demo Interviewer',
+        role: 'INTERVIEWER',
+        joinedAt: createdAt,
+        user: creator,
+      },
+    ],
   };
 }
 

@@ -3,6 +3,7 @@ import { DifficultyBadge } from '../../shared/ui/Badge';
 import styles from '../../shared/ui/workspace.module.css';
 import type { useInterviewDraftStore } from './editor/draft-store';
 import { InterviewCodeEditor } from './editor/InterviewCodeEditor';
+import type { ParticipantIdentity } from './editor/presence';
 import type { getQuestionSnapshot } from './question-snapshot';
 
 export function ActiveInterviewQuestion({
@@ -10,11 +11,13 @@ export function ActiveInterviewQuestion({
   interviewId,
   interviewQuestionId,
   drafts,
+  identity,
 }: {
   snapshot: NonNullable<ReturnType<typeof getQuestionSnapshot>>;
   interviewId: string;
   interviewQuestionId: string;
   drafts: ReturnType<typeof useInterviewDraftStore>;
+  identity: ParticipantIdentity | null;
 }) {
   return (
     <article className={styles.sessionQuestion}>
@@ -37,6 +40,7 @@ export function ActiveInterviewQuestion({
         language={snapshot.language}
         starterCode={snapshot.starterCode}
         drafts={drafts}
+        identity={identity}
       />
     </article>
   );

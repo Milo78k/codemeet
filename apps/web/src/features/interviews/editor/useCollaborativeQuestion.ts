@@ -10,11 +10,17 @@ import {
   releaseCollaborativeQuestion,
   retainCollaborativeQuestion,
 } from './collaboration-runtime';
+import {
+  collectPresenceParticipants,
+  type ParticipantIdentity,
+  type PresenceParticipant,
+} from './presence';
 
 type CollaborativeQuestionOptions = {
   interviewId: string;
   interviewQuestionId: string;
   starterCode: string;
+  identity: ParticipantIdentity | null;
   onChange: (value: string) => void;
 };
 
@@ -22,6 +28,7 @@ export function useCollaborativeQuestion({
   interviewId,
   interviewQuestionId,
   starterCode,
+  identity,
   onChange,
 }: CollaborativeQuestionOptions) {
   const roomId = useMemo(
@@ -35,6 +42,7 @@ export function useCollaborativeQuestion({
   const [status, setStatus] = useState<
     'connecting' | 'connected' | 'reconnecting' | 'disconnected'
   >('connecting');
+  const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
 
   useEffect(() => {
     retainCollaborativeQuestion(roomId);
@@ -50,18 +58,37 @@ export function useCollaborativeQuestion({
       try {
         const collaboration = await connectCollaborativeQuestion(roomId, starterCode);
         if (!active) return undefined;
-        cleanupBinding = await collaboration.bindModel(context.model);
+        if (identity) {
+          const awareness = collaboration.provider.awareness;
+          if (awareness.getLocalState()) awareness.setLocalStateField('user', identity);
+          else awareness.setLocalState({ user: identity });
+        }
+        cleanupBinding = await collaboration.bindModel(context);
         if (!active) {
           cleanupBinding();
           return undefined;
         }
         setRoom(collaboration);
+        const updateParticipants = () => {
+          const awareness = collaboration.provider.awareness;
+          const remoteStates = [...awareness.getStates()]
+            .filter(([clientId]) => clientId !== awareness.clientID)
+            .map(([, state]) => state);
+          setParticipants(
+            collectPresenceParticipants(identity, remoteStates, collaboration.provider.wsconnected),
+          );
+        };
         const updateStatus = ({ status: nextStatus }: { status: string }) => {
           setStatus(nextStatus === 'connected' ? 'connected' : 'reconnecting');
+          updateParticipants();
         };
-        const markDisconnected = () => setStatus('disconnected');
+        const markDisconnected = () => {
+          setStatus('disconnected');
+          setParticipants([]);
+        };
         collaboration.provider.on('status', updateStatus);
         collaboration.provider.on('closed', markDisconnected);
+        collaboration.provider.awareness.on('change', updateParticipants);
         updateStatus({ status: collaboration.provider.wsconnected ? 'connected' : 'connecting' });
         const onTextChange = () => onChange(collaboration.text.toString());
         collaboration.text.observe(onTextChange);
@@ -70,12 +97,15 @@ export function useCollaborativeQuestion({
           active = false;
           collaboration.provider.off('status', updateStatus);
           collaboration.provider.off('closed', markDisconnected);
+          collaboration.provider.awareness.off('change', updateParticipants);
           collaboration.text.unobserve(onTextChange);
           cleanupBinding?.();
+          setParticipants([]);
         };
       } catch (failure) {
         if (active) {
           setStatus('disconnected');
+          setParticipants([]);
           setError(
             failure instanceof Error ? failure.message : 'Live collaboration is unavailable.',
           );
@@ -83,7 +113,7 @@ export function useCollaborativeQuestion({
         return undefined;
       }
     },
-    [onChange, roomId, starterCode],
+    [identity, onChange, roomId, starterCode],
   );
 
   const reset = useCallback(() => {
@@ -91,5 +121,5 @@ export function useCollaborativeQuestion({
     return room.reset();
   }, [room]);
 
-  return { bind, reset, error, status };
+  return { bind, reset, error, status, participants };
 }
