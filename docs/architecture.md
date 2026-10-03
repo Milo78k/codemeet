@@ -273,28 +273,25 @@ PHASE 3 добавляет integration cases для snapshot-at-start, акту�
 
 ## Два приложения вместо трёх
 
-`apps/web` содержит Next.js App Router, dashboard, question library, формы, interview summary, `/join/[token]` и session с collaborative Monaco Editor. `apps/api` — один Node.js HTTP server с GraphQL Yoga и Yjs WebSocket adapter. Модули имеют отдельные обязанности, но общий процесс и доступ к одному экземпляру комнаты.
+`apps/web` содержит Next.js App Router, dashboard, question library, формы, interview summary, `/join/[token]` и session с collaborative Monaco Editor. `apps/api` — один Node.js HTTP server с GraphQL Yoga, Yjs WebSocket adapter и отдельным Session Events endpoint. Модули имеют отдельные обязанности, но общий процесс и доступ к одному экземпляру комнат и event subscribers.
 
 Для MVP это позволяет выполнить бизнес-операцию, сохранить событие в SQL и уведомить подключённых участников без межпроцессного брокера. Отдельное `apps/realtime` потребовало бы дополнительного канала API → realtime и согласования финальных snapshots. Выделение процесса откладывается до реальной потребности масштабировать комнаты отдельно.
 
-Следующая диаграмма показывает реализованные и целевые компоненты; events и document persistence остаются будущей работой:
+Диаграмма показывает текущие realtime boundaries и отдельные будущие sandbox/document-persistence компоненты:
 
 ```mermaid
 flowchart LR
   Browser["Browser: Next.js UI, Apollo, Monaco"] -->|"GraphQL: persistent business state"| Yoga
-  Browser <-->|"Yjs sync + Awareness"| Collaboration
-  Browser <-->|"Business events: planned"| Events
+  Browser <-->|"Yjs sync + Question-scoped Awareness"| Collaboration
+  Browser <-->|"Interview-scoped JSON events"| Events
   Browser -->|"Run выбранного snapshot"| Sandbox["Sandpack: отдельный iframe origin"]
   subgraph API["apps/api: один Node.js процесс"]
     Yoga["GraphQL Yoga"] --> Services["Domain services и authorization"]
     Collaboration["WS /collaboration"] --> Rooms["Room registry: Y.Doc + Awareness"]
-    Events["WS /events: planned"]
-    Services --> Rooms
-    Services -->|"После commit"| Events
-    Rooms --> Persistence["Document persistence"]
+    Events["WS /session-events/:interviewId"]
+    Services -->|"After SQL commit"| Events
   end
   Services --> DB[(PostgreSQL)]
-  Persistence --> DB
 ```
 
 Для production предполагается один публичный origin: reverse proxy направляет страницы и Auth.js в web, GraphQL и WebSocket — в API. Поддержка WebSocket upgrade на proxy проверяется в инфраструктурной фазе. Локальная разработка может использовать разные порты на `localhost` с явными разрешёнными origins.
@@ -364,28 +361,31 @@ Interviewer пока всё ещё общий TEMP DEMO AUTH principal без п
 
 Candidate получает только собственный interview, immutable snapshots, свои participant fields и active question metadata. Creator email, interviewer user relation и reusable Question текущие mutable поля не выдаются. Private notes пока отсутствуют в GraphQL SDL. Candidate не может вызывать mutations interviewer, переключать active question или завершать interview.
 
-В PHASE 6 нет business-event WebSocket: после interviewer `SetActiveQuestion` candidate обновляет Session вручную. Отзыв session закрывает новые подключения и истекающий socket, но отдельный межпроцессный revoke/Finish event пока не транслируется открытому socket.
+PHASE 6 защищает participant identity и membership для candidate. PHASE 8 добавляет realtime delivery для смены active question и Finish. Отзыв session закрывает новые подключения и истекающий socket, но отдельного мгновенного revoke event для уже открытого socket пока нет.
 
-## Business events и durable state — план следующих фаз
+## Session Events — PHASE 8
 
-PHASE 5 реализует один WebSocket route `/collaboration` для Yjs documents; PHASE 6 защищает handshake candidate/interviewer identity; PHASE 7 добавляет эфемерное Awareness presence. Business events route `/events`, recovery API и durable document persistence относятся к будущим фазам.
+GraphQL/PostgreSQL остаётся источником persistent business state. Y.Doc/Y.Text отвечает за collaborative text, Awareness — за эфемерные presence, cursor и selection в Question room, а Session Events уведомляют участников, что Interview state изменился. Session Events не содержат отдельную копию active question/status и не являются source of truth.
 
-GraphQL отвечает за вопросы, интервью, участников, notes, runs и события. Сложные операции выполняют сервисы; resolvers переводят входные данные и вызывают их. Backend валидирует input независимо от Zod на frontend.
+API использует два отдельных WebSocket endpoint на том же HTTP server:
 
-Y.Doc/Y.Text отвечает только за collaborative code. `Interview.status`, активная задача и права остаются серверным business state. Awareness передаёт эфемерные user metadata, cursor и selection для текущей Question room, но не меняет Y.Text и не сохраняется. PHASE 6 проверяет participant identity/membership до Yjs sync; PHASE 7 серверно связывает identity с authorized WebSocket до принятия Awareness. Rooms и documents по-прежнему живут в памяти API, поэтому restart API теряет текущие edits.
+- `/collaboration` сохраняет binary y-websocket protocol для Yjs sync и Awareness. Его комнаты scoped к `interview:{interviewId}:question:{questionId}`.
+- `/session-events/:interviewId` использует отдельный JSON protocol и Interview-scoped subscribers. Один участник может сменить Question room, оставаясь в том же Interview event channel.
 
-В одном WebSocket server используются отдельные маршруты:
+Client отправляет первое JSON сообщение для authentication. Candidate передаёт participant-session token в application message, не в URL; сервер проверяет его hash, срок, отзыв, participant role и совпадение Interview. Interviewer identity берётся из существующего API context и допускается только при наличии interviewer membership в этом Interview. Origin проверяется по тому же allowlist, что и collaboration socket. После проверки сервер отвечает `{"type":"authenticated"}`.
 
-- `/collaboration` — binary protocol y-websocket: Y.Doc sync и question-scoped Awareness;
-- `/events` — небольшой JSON protocol для `QUESTION_CHANGED`, `INTERVIEW_FINISHED`, `CODE_RUN_RESULT`, `PARTICIPANT_JOINED` и других бизнес-уведомлений.
+Текущий discriminated event protocol содержит:
 
-Это два соединения с одной серверной инфраструктурой. JSON не добавляется внутрь стандартного y-websocket protocol. GraphQL subscriptions и отдельный broker в MVP не требуются.
+- `ACTIVE_QUESTION_CHANGED { interviewId, occurredAt }`;
+- `INTERVIEW_FINISHED { interviewId, occurredAt }`.
 
-Каждая значимая бизнес-операция сохраняет `InterviewEvent` в той же SQL transaction, что и изменение. После commit сервер отправляет уведомление с `eventId`, `interviewId`, типом и актуальной business version. Уведомление ускоряет обновление UI; persistent state остаётся в SQL.
+Оба payload намеренно работают как invalidation: сервер не доверяет event как business state, а frontend после authentication, reconnect или валидного event перечитывает canonical Interview через Apollo/GraphQL. Повторные события безопасны: одинаковый ответ не меняет active question, не создаёт второй collaboration provider и не запускает новый room lifecycle. Refetch запросы коалесцируются и выполняются последовательно, чтобы близкие уведомления не создавали шторм запросов. Инициатор тоже получает echo; его GraphQL mutation result и refetch приводят к одному и тому же normalized Interview.
 
-События могут теряться между commit и broadcast либо во время disconnect. Для восстановления GraphQL предоставляет актуальный interview state и доступные principal события после последнего cursor. Cursor опирается на серверный порядок событий, а не только на `createdAt`. На reconnect выполняются подписка и запрос восстановления с дедупликацией по `eventId`; проверка version на подключении, focus и периодической сверке обнаруживает пропуск последнего события. Необходимость именно такой recovery операции фиксируется при проектировании schema, даже если она не входила в минимальный список queries.
+Порядок active-question flow: `setActiveQuestion` валидирует owner, status и membership, затем в Serializable transaction обновляет active question и сохраняет audit `InterviewEvent`. Только после успешного завершения transaction resolver публикует `ACTIVE_QUESTION_CHANGED`. Candidate получает уведомление и перечитывает Interview; существующая Session логика переключает Question, очищает старую Awareness/Yjs lifecycle и открывает новую Question room. `finishInterview` атомарно обновляет status и сохраняет audit event, после commit публикует `INTERVIEW_FINISHED`. Candidate получает canonical `FINISHED`, редактор становится read-only и collaboration lifecycle уничтожается.
 
-Outbox и межпроцессный Pub/Sub отложены. MVP использует одну API instance; несколько процессов без общего room routing и event delivery нельзя включать простым увеличением replica count.
+Events ephemeral: уведомление может потеряться между SQL commit и broadcast либо пока клиент offline. При каждой успешной socket authentication frontend перечитывает Interview, поэтому reconnect восстанавливает фактические active question/status без replay API, polling loop или durable event queue. Это также делает event ordering вторичным: при быстром переходе A → B → C canonical query определяет текущее состояние.
+
+`InterviewEvent` остаётся persistent audit/history записью в транзакции и не используется как transport queue. В этой фазе нет replay, outbox или cross-process pub/sub; fanout хранится в памяти одного API process. Для нескольких API replicas потребуется общий event routing/outbox и координация Yjs rooms. Мгновенный revoke event для уже открытого socket также остаётся будущей работой.
 
 ## Server persistence, snapshots и гонки — план следующих фаз
 
@@ -412,7 +412,7 @@ Reset создаёт новую generation документа и отзывае�
 
 Presence и cursor/selection остаются ephemeral. Heartbeat/disconnect detection снимают отсутствующих участников, а UI показывает reconnect отдельно от offline. SQL не получает записи на каждое движение курсора или символ.
 
-## Browser execution: Sandpack — план PHASE 8
+## Browser execution: Sandpack — будущий этап
 
 PHASE 1 содержит только persistence model `CodeRun`; runner, его client adapter и операции сохранения результатов ещё не реализованы.
 
@@ -420,7 +420,7 @@ PHASE 1 содержит только persistence model `CodeRun`; runner, ег�
 
 WebContainers предоставляют более широкий browser Node.js runtime с процессами и filesystem, но требуют SharedArrayBuffer, cross-origin isolation и настройки COOP/COEP. Для небольших frontend задач Sandpack требует меньше инфраструктуры. Это проектный выбор, а не утверждение об одинаковых security guarantees двух runtimes. [WebContainers quickstart](https://webcontainers.io/guides/quickstart), [Browser support](https://webcontainers.io/guides/browser-support)
 
-`CodeRunner.run({ language, files })` возвращает `{ stdout, stderr, exitCode, duration }`. Адаптер остаётся клиентским модулем; общий интерфейс выносится в package только при наличии нескольких consumers. Для React preview нет естественного завершения процесса: PHASE 8 должна зафиксировать условную семантику успешной сборки/первого render, deadline и сбора output. Нельзя выдавать такой `exitCode` за настоящий Node.js process exit code.
+`CodeRunner.run({ language, files })` возвращает `{ stdout, stderr, exitCode, duration }`. Адаптер остаётся клиентским модулем; общий интерфейс выносится в package только при наличии нескольких consumers. Для React preview нет естественного завершения процесса: при отдельной реализации Runner нужно зафиксировать условную семантику успешной сборки/первого render, deadline и сбора output. Нельзя выдавать такой `exitCode` за настоящий Node.js process exit code.
 
 API создаёт `CodeRun` с immutable code snapshot, затем принимает ограниченный result от того же авторизованного runner client. Потребуется операция сохранения результата отдельно от `runCode`. Run IDs и idempotency исключают дублирование, а правила state transitions исключают изменение уже завершённого результата. При finish оставшиеся runs получают определённый terminal status, и поздний browser response не меняет итог интервью.
 

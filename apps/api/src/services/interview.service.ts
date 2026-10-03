@@ -195,7 +195,7 @@ export async function setActiveQuestion(prisma: PrismaClient, userId: string, in
     if (!interview.questions.some((entry) => entry.questionId === questionId)) {
       throw new ApiError('Question does not belong to this interview.', 'BAD_USER_INPUT');
     }
-    if (interview.activeQuestionId === questionId) return interview;
+    if (interview.activeQuestionId === questionId) return { interview, changed: false };
 
     const result = await transaction.interview.updateMany({
       where: { id: interviewId, createdById: userId, status: InterviewStatus.IN_PROGRESS },
@@ -211,7 +211,7 @@ export async function setActiveQuestion(prisma: PrismaClient, userId: string, in
         payload: { questionId, previousQuestionId: interview.activeQuestionId },
       },
     });
-    return readInterview(transaction, interviewId);
+    return { interview: await readInterview(transaction, interviewId), changed: true };
   });
 }
 

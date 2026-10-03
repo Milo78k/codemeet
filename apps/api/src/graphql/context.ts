@@ -4,12 +4,14 @@ import {
   type PrismaClient,
   type User,
 } from '@codemeet/db';
+import type { SessionEvent } from '@codemeet/shared';
 
 import { findValidParticipantSession } from '../auth/participant-session.js';
 import { ApiError } from './errors.js';
 
 export type ApiIdentity =
   { kind: 'interviewer'; user: User } | { kind: 'candidate'; participant: InterviewParticipant };
+export type SessionEventPublisher = (event: SessionEvent) => void;
 
 export interface ApiContext {
   prisma: PrismaClient;
@@ -17,12 +19,14 @@ export interface ApiContext {
   getIdentity(): Promise<ApiIdentity>;
   getCurrentParticipant(): Promise<InterviewParticipant | null>;
   getCurrentUser(): Promise<User>;
+  publishSessionEvent(event: SessionEvent): void;
 }
 
 export function createApiContext(
   prisma: PrismaClient,
   demoAuthEnabled: boolean,
   authorizationHeader?: string | null,
+  publishSessionEvent?: SessionEventPublisher,
 ): ApiContext {
   let identity: Promise<ApiIdentity> | undefined;
 
@@ -46,6 +50,17 @@ export function createApiContext(
         }
         return resolved.user;
       });
+    },
+    publishSessionEvent(event) {
+      try {
+        publishSessionEvent?.(event);
+      } catch {
+        // Persistence already committed. Realtime delivery is best effort and
+        // must not turn a successful business mutation into a GraphQL error.
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[session-events] Event publish failed.');
+        }
+      }
     },
   };
 

@@ -18,6 +18,7 @@ import styles from '../../shared/ui/workspace.module.css';
 import { ActiveInterviewQuestion } from './ActiveInterviewQuestion';
 import { useInterviewDraftStore } from './editor/draft-store';
 import type { ParticipantIdentity } from './editor/presence';
+import { useInterviewSessionEvents } from './session-events/useInterviewSessionEvents';
 import { FinishInterviewDialog } from './FinishInterviewDialog';
 import { InterviewQuestionList } from './InterviewQuestionList';
 import { InterviewSessionHeader } from './InterviewSessionHeader';
@@ -35,6 +36,12 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
     ssr: false,
     fetchPolicy: 'network-only',
   });
+  const interview = data?.interview;
+  useInterviewSessionEvents({
+    interviewId,
+    enabled: interview?.status === 'IN_PROGRESS',
+    refetch: () => refetch(),
+  });
   const currentParticipant = useQuery(GetCurrentParticipantDocument, {
     fetchPolicy: 'network-only',
     ssr: false,
@@ -43,7 +50,6 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
   const [finishInterview, finishing] = useMutation(FinishInterviewDocument, {
     update: (cache) => invalidateInterviewLists(cache),
   });
-  const interview = data?.interview;
   const candidate = currentParticipant.data?.currentParticipant ?? null;
   const interviewer = interview?.participants.find(
     (participant) => participant.role === 'INTERVIEWER',

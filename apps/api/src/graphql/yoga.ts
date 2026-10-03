@@ -1,7 +1,7 @@
 import { prisma as defaultPrisma, type PrismaClient } from '@codemeet/db';
 import { createYoga } from 'graphql-yoga';
 
-import { createApiContext } from './context.js';
+import { createApiContext, type SessionEventPublisher } from './context.js';
 import { maskApiError } from './errors.js';
 import { schema } from './schema.js';
 import { parseAllowedOrigins } from '../config/origins.js';
@@ -11,6 +11,7 @@ export interface GraphQLYogaOptions {
   demoAuthEnabled?: boolean;
   nodeEnv?: string;
   allowedOrigins?: readonly string[];
+  publishSessionEvent?: SessionEventPublisher;
 }
 
 export function createGraphQLYoga(options: GraphQLYogaOptions = {}) {
@@ -50,7 +51,12 @@ export function createGraphQLYoga(options: GraphQLYogaOptions = {}) {
     ],
     logging: false,
     context: ({ request }) =>
-      createApiContext(prisma, demoAuthEnabled, request.headers.get('authorization')),
+      createApiContext(
+        prisma,
+        demoAuthEnabled,
+        request.headers.get('authorization'),
+        options.publishSessionEvent,
+      ),
     maskedErrors: {
       isDev: false,
       maskError(error) {

@@ -7,6 +7,7 @@ import { resetNavigation } from './support/navigation';
 import { resetEditorAdapter } from './support/monaco';
 import { server } from './support/server';
 import { clearCollaborationTestState } from './support/collaboration';
+import { FakeSessionEventWebSocket } from './support/session-events';
 
 jest.unstable_mockModule(
   '@/features/interviews/editor/collaboration-runtime',
@@ -30,6 +31,11 @@ if (!HTMLDialogElement.prototype.showModal) {
 
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
+  Object.defineProperty(globalThis, 'WebSocket', {
+    configurable: true,
+    value: FakeSessionEventWebSocket,
+  });
+  FakeSessionEventWebSocket.reset();
   resetNavigation();
   resetEditorAdapter();
   sessionStorage.clear();
@@ -38,6 +44,7 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   clearCollaborationTestState();
+  FakeSessionEventWebSocket.reset();
   sessionStorage.clear();
 });
 afterAll(() => server.close());
