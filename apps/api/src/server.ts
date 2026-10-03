@@ -2,15 +2,24 @@ import { createServer } from 'node:http';
 
 import { prisma as defaultPrisma } from '@codemeet/db';
 import { attachCollaborationWebSocket } from './collaboration/collaboration-server.js';
+import {
+  attachSessionEventWebSocket,
+  createSessionEventHub,
+} from './collaboration/session-event-server.js';
 import { parseAllowedOrigins } from './config/origins.js';
 import { createGraphQLYoga, type GraphQLYogaOptions } from './graphql/yoga.js';
 
 export function createApiServer(options: GraphQLYogaOptions = {}) {
   const allowedOrigins =
     options.allowedOrigins ?? process.env.CORS_ALLOWED_ORIGINS?.split(',') ?? [];
-  const yoga = createGraphQLYoga({ ...options, allowedOrigins });
   const nodeEnv = options.nodeEnv ?? process.env.NODE_ENV ?? 'development';
   const demoAuthEnabled = options.demoAuthEnabled ?? process.env.DEMO_AUTH_ENABLED === 'true';
+  const sessionEvents = createSessionEventHub();
+  const yoga = createGraphQLYoga({
+    ...options,
+    allowedOrigins,
+    publishSessionEvent: sessionEvents.publish,
+  });
 
   const server = createServer((request, response) => {
     const pathname = request.url?.split('?')[0];
@@ -41,6 +50,12 @@ export function createApiServer(options: GraphQLYogaOptions = {}) {
   });
 
   attachCollaborationWebSocket(server, {
+    prisma: options.prisma ?? defaultPrisma,
+    demoAuthEnabled,
+    nodeEnv,
+    allowedOrigins: [...parseAllowedOrigins(allowedOrigins)],
+  });
+  attachSessionEventWebSocket(server, sessionEvents, {
     prisma: options.prisma ?? defaultPrisma,
     demoAuthEnabled,
     nodeEnv,

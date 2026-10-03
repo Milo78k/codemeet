@@ -80,7 +80,15 @@ export const resolvers = {
     },
     async setActiveQuestion(_parent: unknown, args: ResolverArgs, context: ApiContext) {
       const user = await context.getCurrentUser();
-      return setActiveQuestion(context.prisma, user.id, args);
+      const result = await setActiveQuestion(context.prisma, user.id, args);
+      if (result.changed) {
+        context.publishSessionEvent({
+          type: 'ACTIVE_QUESTION_CHANGED',
+          interviewId: result.interview.id,
+          occurredAt: new Date().toISOString(),
+        });
+      }
+      return result.interview;
     },
     async startInterview(_parent: unknown, args: ResolverArgs, context: ApiContext) {
       const user = await context.getCurrentUser();
@@ -88,7 +96,13 @@ export const resolvers = {
     },
     async finishInterview(_parent: unknown, args: ResolverArgs, context: ApiContext) {
       const user = await context.getCurrentUser();
-      return finishInterview(context.prisma, user.id, args.interviewId);
+      const interview = await finishInterview(context.prisma, user.id, args.interviewId);
+      context.publishSessionEvent({
+        type: 'INTERVIEW_FINISHED',
+        interviewId: interview.id,
+        occurredAt: new Date().toISOString(),
+      });
+      return interview;
     },
   },
   User: {

@@ -8,6 +8,7 @@ import { InterviewSessionPage } from '@/features/interviews/InterviewSessionPage
 import { createCollaborationRoomId } from '@codemeet/shared';
 
 import { interview, question } from './support/fixtures';
+import { FakeSessionEventWebSocket } from './support/session-events';
 import {
   awarenessState,
   collaborationTestMetrics,
@@ -18,6 +19,7 @@ import {
 } from './support/collaboration';
 import { renderWithApi } from './support/render';
 import { api, server } from './support/server';
+import { storeParticipantSession } from '@/shared/api/participant-session';
 
 const interviewId = 'collaboration-session';
 const firstCode = 'const starterA = 1;';
@@ -31,14 +33,53 @@ function session(status: 'IN_PROGRESS' | 'FINISHED' = 'IN_PROGRESS') {
 }
 
 function mockSession(current = session()) {
+  let queryCount = 0;
   server.use(
-    api.query('GetInterview', () => HttpResponse.json({ data: { interview: current } })),
+    api.query('GetInterview', () => {
+      queryCount += 1;
+      return HttpResponse.json({ data: { interview: current } });
+    }),
     api.mutation('SetActiveQuestion', ({ variables }) => {
       const next = current.questions.find((entry) => entry.question.id === variables.questionId);
       if (next) current = { ...current, activeQuestion: next.question };
       return HttpResponse.json({ data: { setActiveQuestion: current } });
     }),
   );
+  return {
+    setCurrent(next: ReturnType<typeof session>) {
+      current = next;
+    },
+    getQueryCount: () => queryCount,
+  };
+}
+
+function sessionEventMessage(type: 'ACTIVE_QUESTION_CHANGED' | 'INTERVIEW_FINISHED') {
+  return JSON.stringify({
+    type: 'session-event',
+    event: { type, interviewId, occurredAt: '2026-10-03T12:00:00.000Z' },
+  });
+}
+
+async function waitForSessionEventSocket() {
+  let socket: FakeSessionEventWebSocket | undefined;
+  await waitFor(() => {
+    socket = FakeSessionEventWebSocket.instances.find((entry) =>
+      entry.url.includes(`/session-events/${interviewId}`),
+    );
+    expect(socket).toBeDefined();
+  });
+  return socket!;
+}
+
+function authenticateSessionEventSocket(
+  socket: FakeSessionEventWebSocket,
+  role: 'interviewer' | 'candidate',
+) {
+  act(() => {
+    socket.open();
+    socket.receive(JSON.stringify({ type: 'authenticated' }));
+  });
+  expect(JSON.parse(socket.sent[0]!)).toMatchObject({ type: 'authenticate', role });
 }
 
 describe('collaborative interview editor integration', () => {
@@ -231,5 +272,166 @@ describe('collaborative interview editor integration', () => {
       expect(collaborationTestMetrics(roomId)?.awarenessStates).toBe(0);
       expect(awarenessState(roomId)).toBeUndefined();
     });
+  });
+
+  test('candidate refetches canonical state, switches rooms, and returns to preserved room code', async () => {
+    const controller = mockSession();
+    const activeRoomA = createCollaborationRoomId({
+      interviewId,
+      interviewQuestionId: `${interviewId}-attachment-question-a`,
+    });
+    const activeRoomB = createCollaborationRoomId({
+      interviewId,
+      interviewQuestionId: `${interviewId}-attachment-question-b`,
+    });
+    storeParticipantSession({
+      role: 'candidate',
+      token: 'p'.repeat(43),
+      interviewId,
+      expiresAt: '2026-10-10T12:00:00.000Z',
+    });
+    server.use(
+      api.query('GetCurrentParticipant', () =>
+        HttpResponse.json({
+          data: {
+            currentParticipant: {
+              __typename: 'InterviewParticipant',
+              id: 'candidate-anton',
+              interviewId,
+              displayName: 'Anton',
+              role: 'CANDIDATE',
+              joinedAt: '2026-10-02T10:00:00.000Z',
+            },
+          },
+        }),
+      ),
+    );
+    renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    await screen.findByRole('heading', { name: 'Question A' });
+    await screen.findByText('Connected');
+    const events = await waitForSessionEventSocket();
+    authenticateSessionEventSocket(events, 'candidate');
+    await waitFor(() => expect(controller.getQueryCount()).toBeGreaterThan(1));
+
+    act(() => updateRemoteText(activeRoomA, 'const preservedAcrossRooms = true;'));
+    controller.setCurrent({
+      ...session(),
+      activeQuestion: session().questions[1]!.question,
+    });
+    act(() => events.receive(sessionEventMessage('ACTIVE_QUESTION_CHANGED')));
+
+    await screen.findByRole('heading', { name: 'Question B' });
+    await waitFor(() => expect(collaborationTestMetrics(activeRoomA)?.destroyed).toBe(1));
+    expect(roomIds).toContain(activeRoomB);
+    expect(collaborationTestMetrics(activeRoomB)?.providers).toBe(1);
+
+    controller.setCurrent({
+      ...session(),
+      activeQuestion: session().questions[0]!.question,
+    });
+    act(() => events.receive(sessionEventMessage('ACTIVE_QUESTION_CHANGED')));
+    await screen.findByRole('heading', { name: 'Question A' });
+    const editor = screen.getByRole('textbox', { name: 'Code editor' });
+    await waitFor(() => expect(editor).toHaveValue('const preservedAcrossRooms = true;'));
+    expect(collaborationTestMetrics(activeRoomB)?.destroyed).toBe(1);
+  });
+
+  test('duplicate events are idempotent and events for another Interview are ignored', async () => {
+    const controller = mockSession();
+    renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    await screen.findByRole('heading', { name: 'Question A' });
+    await screen.findByText('Connected');
+    const events = await waitForSessionEventSocket();
+    authenticateSessionEventSocket(events, 'interviewer');
+    await waitFor(() => expect(controller.getQueryCount()).toBeGreaterThan(1));
+    const roomA = createCollaborationRoomId({
+      interviewId,
+      interviewQuestionId: `${interviewId}-attachment-question-a`,
+    });
+    const queryCount = controller.getQueryCount();
+
+    act(() => {
+      events.receive(
+        JSON.stringify({
+          type: 'session-event',
+          event: {
+            type: 'ACTIVE_QUESTION_CHANGED',
+            interviewId: 'another-interview',
+            occurredAt: '2026-10-03T12:00:00.000Z',
+          },
+        }),
+      );
+      events.receive(sessionEventMessage('ACTIVE_QUESTION_CHANGED'));
+      events.receive(sessionEventMessage('ACTIVE_QUESTION_CHANGED'));
+      events.receive('{malformed');
+    });
+
+    await waitFor(() => expect(controller.getQueryCount()).toBeGreaterThan(queryCount));
+    await waitFor(() => expect(collaborationTestMetrics(roomA)?.providers).toBe(1));
+    expect(screen.getByRole('heading', { name: 'Question A' })).toBeInTheDocument();
+  });
+
+  test('reconnect refetch repairs a missed event and finish unmounts collaboration', async () => {
+    const controller = mockSession();
+    storeParticipantSession({
+      role: 'candidate',
+      token: 'r'.repeat(43),
+      interviewId,
+      expiresAt: '2026-10-10T12:00:00.000Z',
+    });
+    server.use(
+      api.query('GetCurrentParticipant', () =>
+        HttpResponse.json({
+          data: {
+            currentParticipant: {
+              __typename: 'InterviewParticipant',
+              id: 'candidate-anton',
+              interviewId,
+              displayName: 'Anton',
+              role: 'CANDIDATE',
+              joinedAt: '2026-10-02T10:00:00.000Z',
+            },
+          },
+        }),
+      ),
+    );
+    renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    await screen.findByRole('heading', { name: 'Question A' });
+    await screen.findByText('Connected');
+    const firstEvents = await waitForSessionEventSocket();
+    authenticateSessionEventSocket(firstEvents, 'candidate');
+    await waitFor(() => expect(controller.getQueryCount()).toBeGreaterThan(1));
+
+    controller.setCurrent({
+      ...session(),
+      activeQuestion: session().questions[1]!.question,
+    });
+    act(() => firstEvents.disconnect());
+    await waitFor(() => expect(FakeSessionEventWebSocket.instances.length).toBeGreaterThan(1));
+    const reconnected = FakeSessionEventWebSocket.instances.at(-1)!;
+    reconnected.open();
+    reconnected.receive(JSON.stringify({ type: 'authenticated' }));
+    await screen.findByRole('heading', { name: 'Question B' });
+
+    const roomB = createCollaborationRoomId({
+      interviewId,
+      interviewQuestionId: `${interviewId}-attachment-question-b`,
+    });
+    controller.setCurrent(session('FINISHED'));
+    act(() => reconnected.receive(sessionEventMessage('INTERVIEW_FINISHED')));
+    expect(await screen.findByText('Interview is finished')).toBeInTheDocument();
+    await waitFor(() => expect(collaborationTestMetrics(roomB)?.destroyed).toBe(1));
+    expect(reconnected.readyState).toBe(FakeSessionEventWebSocket.CLOSED);
+  });
+
+  test('unmount closes the event socket and removes its reconnect listener', async () => {
+    mockSession();
+    const mounted = renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    await screen.findByRole('heading', { name: 'Question A' });
+    const events = await waitForSessionEventSocket();
+    mounted.unmount();
+    expect(events.readyState).toBe(FakeSessionEventWebSocket.CLOSED);
+    expect(events.onmessage).toBeNull();
+    expect(events.onclose).toBeNull();
   });
 });

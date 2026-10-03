@@ -6,7 +6,7 @@ CodeMeet — fullstack pet-project для технических интервь�
 
 ## Текущий этап
 
-**PHASE 7 — Awareness, Presence и Remote Cursors — завершена.** Candidate входит по одноразовой ссылке; авторизованные участники активной Question room видят имя, роль, курсор и selection друг друга. Сервер привязывает Awareness identity к авторизованному WebSocket и удаляет присланные клиентом identity поля. Interviewer пока использует TEMP DEMO AUTH; durable Yjs persistence, Auth.js, запуск кода и business-event delivery ещё не реализованы.
+**PHASE 8 — Realtime Session Events — завершена; manual browser smoke PASS.** Подключённые участники получают Interview-scoped уведомления о смене активного вопроса и завершении интервью. После уведомления клиент перечитывает canonical Interview через GraphQL, поэтому persistent business state остаётся в PostgreSQL. Interviewer пока использует TEMP DEMO AUTH; durable Yjs persistence, Auth.js и запуск кода остаются будущей работой.
 
 В репозитории настроены pnpm, Turborepo, TypeScript strict, ESLint и Prettier. Будущие библиотеки устанавливаются тогда, когда для них появляется функциональность.
 
@@ -25,12 +25,13 @@ CodeMeet — fullstack pet-project для технических интервь�
 
 Для MVP выбран модульный Node.js API с GraphQL и WebSocket в одном процессе. Это упрощает передачу бизнес-событий после SQL transaction и сохранение финальных документов. Интерфейс работает в отдельном Next.js приложении. Выделение realtime в третий процесс потребует координации комнат, событий и snapshots; оно отложено до потребности в независимом масштабировании.
 
-Сейчас GraphQL обслуживает business state, а отдельные frames одного авторизованного WebSocket обслуживают документ и эфемерную Awareness:
+GraphQL/PostgreSQL обслуживает persistent business state. Два отдельных WebSocket endpoint на одном API HTTP server обслуживают Question-scoped Yjs/Awareness и Interview-scoped Session Events:
 
 ```mermaid
 flowchart LR
   Web["apps/web: Next.js, Apollo, Monaco"] -->|GraphQL| API
-  Web <-->|"Y.Doc + Awareness / authorized WebSocket"| API
+  Web <-->|"Y.Doc + Awareness /collaboration"| API
+  Web <-->|"Session Events /session-events/:interviewId"| API
   API["apps/api: Yoga + realtime adapter"] --> DB[("PostgreSQL / Prisma")]
   Web -.-> Runner["Sandpack: planned"]
 ```
@@ -45,15 +46,24 @@ Raw participant token хранится в `sessionStorage` текущей вкл
 
 Это authentication/identity, а не полное равенство с production authentication: interviewer identity всё ещё общий TEMP DEMO AUTH principal и не защищает чужого пользователя. Candidate session проверяется по hash, сроку, отзыву и participant membership.
 
-### Collaborative editing
+### Collaborative editing and session events
 
-`NEXT_PUBLIC_REALTIME_URL` задаёт WebSocket endpoint, например `ws://127.0.0.1:4000/collaboration` для разработки и `wss://<host>/collaboration` за production TLS proxy. Настройте его в root `.env` вместе с `NEXT_PUBLIC_GRAPHQL_URL`; Next.js встраивает оба публичных URL при запуске/build. Compose поднимает только PostgreSQL, а GraphQL и WebSocket запускаются одним `apps/api` процессом.
+`NEXT_PUBLIC_REALTIME_URL` задаёт базовый WebSocket URL, например `ws://127.0.0.1:4000` для разработки и `wss://<host>` за production TLS proxy. Из него frontend строит отдельные endpoints `/collaboration` и `/session-events/:interviewId`. Настройте его в root `.env` вместе с `NEXT_PUBLIC_GRAPHQL_URL`; Next.js встраивает оба публичных URL при запуске/build. Compose поднимает только PostgreSQL, а GraphQL и оба WebSocket endpoint запускаются одним `apps/api` процессом.
 
 В session статус редактора показывает `Connecting…`, `Connected`, `Reconnecting…` или `Disconnected`. Участники текущей Question room видны в компактном списке Participants; y-monaco синхронизирует selection, а editor показывает цветной remote caret с display name. Цвет стабильно выводится из participantId, а несколько вкладок одного participant объединяются в списке. Код, presence и cursors проходят через WebSocket; typing не запускает GraphQL mutation. Provider отключает BroadcastChannel, чтобы обмен шёл через API. API проверяет Origin, participant session, роль, membership, принадлежность interview/question и `IN_PROGRESS` до синхронизации; client-supplied Awareness identity заменяется серверной.
 
 Refresh получает текущий Yjs document, пока API process работает. При перезапуске API комнаты очищаются и редактор возвращается к постоянному `snapshotStarterCode`: PHASE 5 не сохраняет Yjs documents в PostgreSQL. Текущие изменения доступны только в памяти активного API процесса.
 
-Подробная реализация и результаты проверок: [PHASE 5](docs/phase-5-report.md), [PHASE 6](docs/phase-6-report.md) и [PHASE 7](docs/phase-7-report.md).
+Session Events передают только invalidation-уведомления: `ACTIVE_QUESTION_CHANGED` и `INTERVIEW_FINISHED`. После успешного commit GraphQL mutation API публикует событие подключённым участникам того же Interview. Candidate автоматически refetches Interview через Apollo и использует существующий question-switch lifecycle; после finish приходит canonical `FINISHED` state и collaboration закрывается. Reconnect тоже refetches Interview, поэтому потерянное эфемерное уведомление не оставляет старое состояние. Повторный echo инициатору безопасен: одинаковый canonical state не создаёт повторный room lifecycle.
+
+```text
+setActiveQuestion → GraphQL → PostgreSQL commit → Session Event
+  → Candidate → Apollo canonical refetch → Question room switch
+```
+
+Persistent business state хранится в GraphQL/PostgreSQL. Collaborative text проходит через Yjs. Presence, cursor и selection проходят через Awareness. Session Events только сообщают, что Interview изменился; они не являются source of truth, очередью или replay log.
+
+Подробная реализация и результаты проверок: [PHASE 5](docs/phase-5-report.md), [PHASE 6](docs/phase-6-report.md), [PHASE 7](docs/phase-7-report.md) и [PHASE 8](docs/phase-8-report.md).
 
 ### Структура репозитория
 
@@ -394,11 +404,11 @@ Layout и route wrappers — Server Components; отдельный `WebApolloPro
 
 Forms используют React Hook Form + Zod и отображают field errors, pending и controlled GraphQL errors. После создания задачи открывается library с success message. Создание интервью выполняется только при submit: CreateInterview, затем последовательные attachments. После частичного сбоя UI показывает сохранённый interview, блокирует title/selection и повторяет только оставшиеся attachments; при неопределённом результате сверяет GetInterview. После READY открывается summary.
 
-## Realtime architecture — PHASE 5–7
+## Realtime architecture — PHASE 5–8
 
 GraphQL/Apollo отвечает за business state. Monaco ↔ y-monaco ↔ Y.Text/Y.Doc отвечает за общий код. Presence, participant metadata, cursor и selection передаются отдельно в Awareness frames того же WebSocket и остаются эфемерными. API связывает `{ participantId, displayName, role }` с авторизованной сессией и переписывает клиентскую metadata перед broadcast. Participant list дедуплицируется по participantId; cursor каждой вкладки остаётся отдельным. Стабильный cursor color вычисляется из participantId.
 
-Один WS endpoint `/collaboration` обслуживает binary Yjs document sync и Awareness protocol. Room и presence scoped к паре interview/question, а `disableBc: true` требует путь через API WebSocket вместо межтабового BroadcastChannel. На disconnect стандартный Awareness protocol удаляет участника; y-websocket восстанавливает состояние при reconnect. GraphQL остаётся источником status и active question; candidate не переключает задачу и должен обновить Session после question change, поскольку business-event delivery пока нет. При рестарте API теряются несохранённые edits; SQL persistence и recovery добавляются позже.
+`/collaboration` обслуживает binary Yjs document sync и Awareness protocol; его room и presence scoped к паре interview/question, а `disableBc: true` требует путь через API вместо межтабового BroadcastChannel. `/session-events/:interviewId` — отдельный JSON WebSocket на том же HTTP server и с отдельной авторизацией; он сообщает о смене active question и Finish. Это Interview scope, не зависящий от смены Question room. На disconnect стандартный Awareness protocol удаляет участника; y-websocket восстанавливает состояние при reconnect. Session Event после аутентификации и при каждом reconnect вызывает canonical GraphQL refetch; после valid event refetch также приводит Session к текущему state. Поэтому потеря event не требует event replay. При рестарте API теряются несохранённые Yjs edits; SQL persistence для документов добавляется отдельно.
 
 ## Apollo cache strategy — PHASE 2
 
@@ -412,7 +422,7 @@ Yjs отвечает за concurrent text edits и слияние updates пос
 
 PHASE 5 покрывает concurrent edits, reconnect convergence и shared Reset; PHASE 6 добавляет identity/access gates; PHASE 7 добавляет ephemeral Awareness без изменения CRDT semantics. Локальный Y.Doc сохраняется при кратком reconnect, но живёт только в памяти API. Уже открытый socket не получает мгновенный revoke/status event, если session отозвали или interview завершён в другом процессе.
 
-## Security of code execution — PHASE 8
+## Future code execution
 
 Выбран Sandpack: он подходит для небольших JavaScript/TypeScript/React задач, browser preview и console. WebContainers дают browser Node.js, но требуют дополнительных условий cross-origin isolation. Подробные trade-offs и первичные ссылки находятся в архитектурном документе.
 
