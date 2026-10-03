@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
 
 import { AuthenticatedWebSocket } from '@/features/interviews/editor/authenticated-websocket';
 import { storeParticipantSession } from '@/shared/api/participant-session';
@@ -74,6 +76,42 @@ describe('authenticated y-websocket transport adapter', () => {
 
     expect(opened).toHaveBeenCalledTimes(1);
     expect(socket.sent[1]).toBe(syncStep);
+  });
+
+  test('lets y-websocket send every Yjs and Awareness update after authentication', () => {
+    Object.defineProperty(globalThis, 'WebSocket', { configurable: true, value: FakeSocket });
+    const doc = new Y.Doc();
+    const provider = new WebsocketProvider(
+      'ws://127.0.0.1:4000/collaboration',
+      'interview:one:question:one',
+      doc,
+      {
+        disableBc: true,
+        WebSocketPolyfill: AuthenticatedWebSocket as unknown as typeof WebSocket,
+      },
+    );
+    const socket = FakeSocket.latest!;
+
+    try {
+      socket.open();
+      socket.message(JSON.stringify({ type: 'authenticated' }));
+      const initialFrames = socket.sent.length;
+
+      doc.getText('code').insert(0, 'x');
+      expect(socket.sent).toHaveLength(initialFrames + 1);
+      expect((socket.sent.at(-1) as Uint8Array)[0]).toBe(0);
+
+      const beforeAwareness = socket.sent.length;
+      provider.awareness.setLocalStateField('selection', {
+        anchor: { type: null, tname: 'code', item: null, assoc: 0 },
+        head: { type: null, tname: 'code', item: null, assoc: 0 },
+      });
+      expect(socket.sent).toHaveLength(beforeAwareness + 1);
+      expect((socket.sent.at(-1) as Uint8Array)[0]).toBe(1);
+    } finally {
+      provider.destroy();
+      doc.destroy();
+    }
   });
 
   test('sends candidate bearer only as the first application message, never in the URL', () => {

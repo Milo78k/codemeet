@@ -99,6 +99,17 @@ function sameAwarenessState(left: unknown, right: unknown): boolean {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
+function serializeAwarenessRelativePosition(
+  position: ReturnType<typeof Y.createRelativePositionFromJSON>,
+) {
+  return {
+    type: position.type ? { client: position.type.client, clock: position.type.clock } : null,
+    tname: position.tname,
+    item: position.item ? { client: position.item.client, clock: position.item.clock } : null,
+    assoc: position.assoc,
+  };
+}
+
 function normalizeAwarenessState(
   state: unknown,
   identity: TrustedParticipantIdentity,
@@ -140,8 +151,10 @@ function normalizeAwarenessState(
     return {
       user: identity,
       selection: {
-        anchor: Y.relativePositionToJSON(anchor),
-        head: Y.relativePositionToJSON(head),
+        // y-monaco consumes these JSON objects directly and distinguishes an
+        // explicit null item/type from a missing field at text boundaries.
+        anchor: serializeAwarenessRelativePosition(anchor),
+        head: serializeAwarenessRelativePosition(head),
       },
     };
   } catch {

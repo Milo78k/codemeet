@@ -67,6 +67,25 @@ export class AuthenticatedWebSocket {
     return this.socket.readyState;
   }
 
+  // y-websocket checks `provider.ws.OPEN` on the socket instance before it
+  // sends document and Awareness updates. Native browser WebSockets expose
+  // these constants on instances; the wrapper must preserve that contract.
+  get CONNECTING() {
+    return WebSocket.CONNECTING;
+  }
+
+  get OPEN() {
+    return WebSocket.OPEN;
+  }
+
+  get CLOSING() {
+    return WebSocket.CLOSING;
+  }
+
+  get CLOSED() {
+    return WebSocket.CLOSED;
+  }
+
   get binaryType(): BinaryType {
     return this.socket.binaryType;
   }

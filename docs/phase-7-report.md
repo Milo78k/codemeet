@@ -1,6 +1,6 @@
 # CodeMeet — PHASE 7 report
 
-Дата: 2 октября 2026. Реализованы question-scoped Awareness, participant presence, remote selections и цветные caret labels поверх PHASE 5/6 WebSocket/Yjs architecture. Commit и push не выполнялись; PHASE 8 не начиналась.
+Первоначальный отчёт: 2 октября 2026. Реализованы question-scoped Awareness, participant presence, remote selections и цветные caret labels поверх PHASE 5/6 WebSocket/Yjs architecture. PHASE 8 не начиналась.
 
 ## 1. Baseline
 
@@ -72,7 +72,7 @@ API database-free suites: `collaboration.transport`, `cors`, `yjs-convergence` �
 
 ## 16. Two-browser smoke
 
-SKIPPED. In-app browser runtime discovery вернул пустой список browser contexts. Для этой проверки не использовались альтернативные browser runners. Настоящие UI scenarios двух независимых browser contexts — presence, remote cursor/selection, typing и switch/disconnect/rejoin — остаются ручной проверкой после появления browser runtime.
+Первоначальный автоматизированный запуск был SKIPPED: in-app browser runtime discovery вернул пустой список browser contexts. Повторный ручной smoke после исправлений успешно пройден в двух независимых browser contexts; результаты зафиксированы ниже.
 
 ## 17. Limitations
 
@@ -84,7 +84,7 @@ Awareness живёт только пока API process держит комнат
 
 ## 19. Что логично дальше
 
-Следующая отдельная фаза по roadmap — browser code execution/runtime limits. Перед её началом следует повторить двухклиентский browser smoke для PHASE 7; работа в следующую фазу в этом изменении не начиналась.
+Следующая отдельная фаза по roadmap — browser code execution/runtime limits. PHASE 7 manual browser smoke пройден; следующая продуктовая фаза не начиналась.
 
 ## 20. Пять вопросов интервьюера
 
@@ -112,7 +112,7 @@ Awareness живёт только пока API process держит комнат
 ### SKIPPED
 
 - PostgreSQL-backed API/guest authorization integration tests и проверки migration/seed: локальные порты 5432/55432 закрыты, PostgreSQL, Docker и `pg_isready` отсутствуют.
-- Два независимых браузерных клиента, cursor/selection визуальная проверка, Question switch и browser disconnect smoke: browser runtime не предоставил browser contexts.
+- Автоматизированный browser smoke при первоначальной проверке: browser runtime не предоставил browser contexts. Последующий ручной smoke в двух независимых browser contexts пройден, см. результат ниже.
 - Root `pnpm check` и `pnpm build`: `pnpm` не установлен; текущий Node `22.14.0` ниже проектного минимума `22.15.0`. Эквивалентные package typecheck/lint/build задачи, доступные напрямую из локальных binaries, были выполнены отдельно.
 
 ### FAILED
@@ -120,3 +120,45 @@ Awareness живёт только пока API process держит комнат
 - Полный repository `prettier --check .` по-прежнему завершается ошибкой только на двух файлах, которые уже не проходили baseline: `apps/web/src/shared/api/errors.ts` и `docs/phase-5-report.md`. PHASE 7 их не меняла; все изменённые файлы отформатированы и проверены.
 
 Новые зависимости не устанавливались, конфигурация и миграции не менялись. DB reset, seed, commit и push не выполнялись.
+
+## Ручной smoke: первоначальный отказ, исправление и повторный PASS (3 октября 2026)
+
+### Результат первоначального smoke
+
+Первоначальный smoke завершился FAILED в двух независимых browser contexts: Participants не отражал второго участника надёжно, remote cursor и selection не отображались, а текстовые изменения иногда приходили с задержкой пачкой. После исправлений повторный smoke пройден: MANUAL BROWSER SMOKE: PASS. PHASE 8 не начиналась.
+
+### Root cause
+
+Установленный `y-websocket@3.1.0` отправляет Yjs document и Awareness frames через `broadcastMessage`, который проверяет `provider.ws.readyState === provider.ws.OPEN` у экземпляра WebSocket. `AuthenticatedWebSocket` предоставлял `CONNECTING`, `OPEN`, `CLOSING` и `CLOSED` только как static properties класса. У его экземпляра `ws.OPEN` был `undefined`, поэтому y-websocket пропускал отправку обычных document updates и Awareness updates после начального handshake. Handshake и первоначальная синхронизация используют прямые отправки и могли успешно показывать состояние Connected; при reconnect накопленные Yjs изменения синхронизировались позже, что объясняет появление текста пачкой.
+
+Отдельно браузерный dev log зафиксировал `Cannot read properties of undefined (reading 'client')` в y-monaco при remote cursor на конце текста. Сервер пересобирал selection positions через `Y.relativePositionToJSON`, который опускает null-поля. В частности, end-of-text position имеет `item: null`; после удаления этого поля y-monaco получал `item: undefined` и выбрасывал исключение при рендере Awareness change. Это также мешало remote cursor/selection и могло прерывать последующие Awareness listeners.
+
+Проверка установленного `y-monaco@0.1.6` подтвердила, что binding принимает четвёртый аргумент Awareness и сам пишет `selection.anchor/head` как Yjs relative positions. Приложение уже передавало ему `provider.awareness`. Серверная нормализация заменяет только identity на trusted user и сохраняет валидные `selection.anchor/head`; это не было причиной потери cursor state.
+
+### Fix
+
+Добавлены instance getters для стандартных WebSocket ready-state constants. Теперь y-websocket видит `provider.ws.OPEN` и отправляет каждое Yjs/Awareness изменение штатным transport. Сервер sanitizer по-прежнему заменяет только identity и теперь сериализует валидированные anchor/head поля с явными `type: null` и `item: null`, сохраняя формат, который напрямую читает y-monaco. Формат Yjs, Awareness и курсора не менялся; debounce, polling, GraphQL typing mutations и новый протокол не добавлялись.
+
+### Regression coverage
+
+- Frontend regression test создаёт настоящий установленный `WebsocketProvider` с `AuthenticatedWebSocket`, проходит auth acknowledgement и проверяет отдельные outgoing Yjs update и Awareness frames сразу после изменения.
+- API transport test проверяет, что сервер сохраняет trusted participant identity и anchor/head selection, включая `item: null` в конце текста; полученная позиция успешно разрешается Yjs, а transport проверяет появление/удаление presence между клиентами.
+- Существующие React collaboration tests проверяют обновление Participants и отсутствие дублирующего provider при StrictMode lifecycle.
+- Исправлен `testMatch`: frontend Jest ранее включал только `.test.tsx`, из-за чего уже существующие `.test.ts` regression suites (в том числе adapter и presence) не запускались.
+
+Frontend tests: 14 suites / 96 tests PASS. API tests: 7 suites / 104 tests PASS. API build, lint, typecheck и frontend lint PASS. Изолированный frontend `tsc --noEmit` по исходникам и tests PASS. Штатный frontend typecheck во время работающего Next dev server завершился на дублирующихся route declarations из `.next/types` и `.next/dev/types`; это конфликт сгенерированных build/dev типов, не ошибка исходников collaboration.
+
+Дополнительно проверен runtime path на работающем API двумя независимыми WebSocket/Yjs clients: отдельный text update дошёл за 6.2 ms, Awareness selection с caret на конце текста — за 5.5 ms; второй client получил trusted `Demo Interviewer` identity и разрешил caret через Yjs без ошибки. После измерения API dev process перезапущен, поэтому временное изменение in-memory Y.Doc удалено и room снова загружается из snapshot; БД не изменялась. Повторный ручной browser smoke также пройден.
+
+### Результат повторного ручного smoke
+
+**MANUAL BROWSER SMOKE: PASS** в двух независимых browser contexts.
+
+- Participants отображают interviewer и candidate.
+- Remote cursor и remote selection отображаются у второго участника.
+- Двусторонний realtime typing работает без перезагрузки; ввод передаётся через WebSocket без GraphQL mutation на каждый keypress.
+- Modified синхронизируется; Reset обновляет код у второго клиента.
+- При переходе Question 1 → Question 2 presence/cursors старой комнаты очищаются; при возврате в Question 1 общий код остаётся актуальным.
+- Offline/Online reconnect без закрытия Candidate tab восстанавливает присутствие и схождение Yjs documents.
+- Duplicate/ghost participants не появляются; закрытие Candidate tab удаляет его presence.
+- Проверены browser console и Network обоих клиентов.

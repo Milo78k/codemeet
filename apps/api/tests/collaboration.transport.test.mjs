@@ -291,14 +291,23 @@ describe('Yjs WebSocket transport', () => {
     await Promise.all([candidate.synced, interviewer.synced, otherQuestionInterviewer.synced]);
 
     const initialCode = record.starterCode;
-    const cursor = Y.relativePositionToJSON(
-      Y.createRelativePositionFromTypeIndex(candidate.doc.getText('code'), 4),
+    const anchor = JSON.parse(
+      JSON.stringify(Y.createRelativePositionFromTypeIndex(candidate.doc.getText('code'), 4)),
     );
+    const head = JSON.parse(
+      JSON.stringify(
+        Y.createRelativePositionFromTypeIndex(
+          candidate.doc.getText('code'),
+          candidate.doc.getText('code').length,
+        ),
+      ),
+    );
+    expect(head.item).toBeNull();
     candidate.awareness.setLocalState({
       user: { participantId: 'spoofed', displayName: 'Attacker', role: 'INTERVIEWER' },
       sessionToken: credential.token,
       permissions: { canFinish: true },
-      selection: { anchor: cursor, head: cursor },
+      selection: { anchor, head },
     });
     await expectAwareness(interviewer, candidateIdentity.id);
     await expectAwareness(otherQuestionInterviewer, candidateIdentity.id, false);
@@ -310,6 +319,13 @@ describe('Yjs WebSocket transport', () => {
       displayName: 'Anton Candidate',
       role: 'CANDIDATE',
     });
+    expect(trustedCandidate?.selection).toEqual({ anchor, head });
+    expect(() =>
+      Y.createAbsolutePositionFromRelativePosition(
+        trustedCandidate.selection.head,
+        interviewer.doc,
+      ),
+    ).not.toThrow();
     expect(trustedCandidate).not.toHaveProperty('sessionToken');
     expect(trustedCandidate).not.toHaveProperty('permissions');
     expect(JSON.stringify(trustedCandidate)).not.toContain(credential.token);

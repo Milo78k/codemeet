@@ -78,6 +78,7 @@ describe('collaborative interview editor integration', () => {
     act(() => updateRemoteText(roomId, 'const remoteEdit = true;'));
     await waitFor(() => expect(editor).toHaveValue('const remoteEdit = true;'));
     expect(screen.getByText('Modified')).toBeInTheDocument();
+    expect(collaborationTestMetrics(roomId)?.providers).toBe(1);
   });
 
   test('switching attachment destroys its provider and reset is shared through Y.Text', async () => {

@@ -10,7 +10,7 @@ export default createJestConfig({
   },
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
-  testMatch: ['<rootDir>/tests/**/*.test.tsx'],
+  testMatch: ['<rootDir>/tests/**/*.test.ts', '<rootDir>/tests/**/*.test.tsx'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   maxWorkers: 1,
   testTimeout: 10_000,
