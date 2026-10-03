@@ -288,3 +288,69 @@
     height: 320px;
   }
 }
+
+.runButton {
+  border: 1px solid #1f664d;
+  border-radius: 7px;
+  padding: 7px 12px;
+  background: #236e53;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.runButton:hover:not(:disabled) {
+  background: #195b43;
+}
+.runButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.outputPanel {
+  margin: 0 22px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fcfdfa;
+  min-height: 84px;
+}
+.outputTitle {
+  margin: 0 0 8px;
+  color: #354333;
+  font-size: 12px;
+  font-weight: 700;
+}
+.outputStatus,
+.outputSuccess,
+.outputFailure,
+.outputNotice {
+  margin: 0;
+  font-size: 12px;
+}
+.outputStatus,
+.outputNotice {
+  color: #66715f;
+}
+.outputSuccess {
+  color: #236e53;
+  font-weight: 650;
+}
+.outputFailure,
+.outputError {
+  color: #a3362a;
+}
+.outputEntries {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+}
+.outputEntry {
+  color: #26352b;
+}

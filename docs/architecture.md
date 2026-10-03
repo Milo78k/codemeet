@@ -2,7 +2,7 @@
 
 ## Статус документа
 
-**PHASE 7:** interviewer и candidate входят в авторизованную комнату активного InterviewQuestion. GraphQL обслуживает business state, Y.Doc/Y.Text — общий исходный код, а Awareness — только эфемерное presence/cursor/selection состояние. Сервер связывает participant identity с проверенным WebSocket и переписывает Awareness metadata перед broadcast. TEMP DEMO AUTH для interviewer остаётся общей локальной личностью; durable Yjs persistence и code execution ещё не реализованы. Результаты и ограничения проверок: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md).
+**PHASE 9 complete:** Interview Session runs JavaScript and standalone TypeScript snippets in a CSP-restricted browser Worker; manual browser smoke passed, including real Worker termination for an infinite loop. GraphQL/PostgreSQL остаются business state, Y.Doc/Y.Text — общим исходным кодом, Awareness — только эфемерным presence/cursor/selection, Session Events — уведомлениями о бизнес-переходах. Code Runner is local to the initiating browser and does not send user source to the API, persist or broadcast its result. React TSX execution, durable Yjs persistence and interviewer authentication are not implemented. Результаты и ограничения: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md).
 
 ## Реализованный pipeline PHASE 2–7
 
@@ -277,14 +277,15 @@ PHASE 3 добавляет integration cases для snapshot-at-start, акту�
 
 Для MVP это позволяет выполнить бизнес-операцию, сохранить событие в SQL и уведомить подключённых участников без межпроцессного брокера. Отдельное `apps/realtime` потребовало бы дополнительного канала API → realtime и согласования финальных snapshots. Выделение процесса откладывается до реальной потребности масштабировать комнаты отдельно.
 
-Диаграмма показывает текущие realtime boundaries и отдельные будущие sandbox/document-persistence компоненты:
+Диаграмма показывает текущие realtime boundaries и отдельный browser execution boundary:
 
 ```mermaid
 flowchart LR
   Browser["Browser: Next.js UI, Apollo, Monaco"] -->|"GraphQL: persistent business state"| Yoga
   Browser <-->|"Yjs sync + Question-scoped Awareness"| Collaboration
   Browser <-->|"Interview-scoped JSON events"| Events
-  Browser -->|"Run выбранного snapshot"| Sandbox["Sandpack: отдельный iframe origin"]
+  Browser -->|"immutable Y.Text snapshot"| Sandbox["CSP-restricted Web Worker"]
+  Sandbox -->|"local result / MessageChannel"| Browser
   subgraph API["apps/api: один Node.js процесс"]
     Yoga["GraphQL Yoga"] --> Services["Domain services и authorization"]
     Collaboration["WS /collaboration"] --> Rooms["Room registry: Y.Doc + Awareness"]
@@ -412,21 +413,30 @@ Reset создаёт новую generation документа и отзывае�
 
 Presence и cursor/selection остаются ephemeral. Heartbeat/disconnect detection снимают отсутствующих участников, а UI показывает reconnect отдельно от offline. SQL не получает записи на каждое движение курсора или символ.
 
-## Browser execution: Sandpack — будущий этап
+## Browser code execution — PHASE 9
 
-PHASE 1 содержит только persistence model `CodeRun`; runner, его client adapter и операции сохранения результатов ещё не реализованы.
+Execution flow is deliberately local to `apps/web`:
 
-Для JavaScript, TypeScript и React/TSX выбран Sandpack Runtime. Он исполняет frontend проекты в iframe и предоставляет bundler protocol; Monaco используется отдельно, без второго встроенного редактора. Console собирается через Sandpack messages. На Run передаётся зафиксированный набор файлов, а не live editing state. Начальные React файлы — `App.tsx` и `styles.css`, служебный entrypoint остаётся частью runtime template. [Sandpack client](https://sandpack.codesandbox.io/docs/advanced-usage/client), [Monaco integration](https://sandpack.codesandbox.io/docs/guides/integrate-monaco-editor), [Console](https://sandpack.codesandbox.io/docs/advanced-usage/components#console)
+```mermaid
+flowchart LR
+  YText["Current Monaco model bound to Y.Text"] -->|"copy string at click"| Snapshot["Immutable source snapshot"]
+  Snapshot -->|"Worker + transferred MessagePort"| Worker["Browser Worker with per-path CSP"]
+  Worker -->|"bounded log/result messages"| Output["Initiator's local Output UI"]
+```
 
-WebContainers предоставляют более широкий browser Node.js runtime с процессами и filesystem, но требуют SharedArrayBuffer, cross-origin isolation и настройки COOP/COEP. Для небольших frontend задач Sandpack требует меньше инфраструктуры. Это проектный выбор, а не утверждение об одинаковых security guarantees двух runtimes. [WebContainers quickstart](https://webcontainers.io/guides/quickstart), [Browser support](https://webcontainers.io/guides/browser-support)
+At Run, the frontend reads `model.getValue()` synchronously from the active question model. That Monaco model is bound directly to its collaborative `Y.Text`, so remote Yjs edits are already reflected; starter snapshot, React render state and Apollo are not read. Strings are immutable snapshots, and the running Worker receives no reference to later model changes. Worker request, running state and output never enter Y.Doc, Awareness, Session Events, Apollo or GraphQL. Typing continues through the existing Yjs WebSocket.
 
-`CodeRunner.run({ language, files })` возвращает `{ stdout, stderr, exitCode, duration }`. Адаптер остаётся клиентским модулем; общий интерфейс выносится в package только при наличии нескольких consumers. Для React preview нет естественного завершения процесса: при отдельной реализации Runner нужно зафиксировать условную семантику успешной сборки/первого render, deadline и сбора output. Нельзя выдавать такой `exitCode` за настоящий Node.js process exit code.
+The app builds a dedicated static **module Worker** with the existing `esbuild` script because the worker bundle imports a shared helper chunk and lazily loads the TypeScript compiler. User source itself runs as a classic script inside that worker. Plain JavaScript with no module syntax is passed through unchanged. If a JavaScript or TypeScript starter uses `export` declarations, the existing TypeScript compiler lowers those declarations to worker-local CommonJS bindings so `new Function` receives no ESM `export` marker; this handles the seeded `export function twoSum(...)` starter. TypeScript is transpiled with `module: CommonJS` and legacy module detection, not type-checked. Static imports, external packages and module graphs remain unsupported. React TSX is explicitly unsupported because it needs a React preview, a multi-file module graph and a different completion contract. This phase adds no runtime dependency or external execution service.
 
-API создаёт `CodeRun` с immutable code snapshot, затем принимает ограниченный result от того же авторизованного runner client. Потребуется операция сохранения результата отдельно от `runCode`. Run IDs и idempotency исключают дублирование, а правила state transitions исключают изменение уже завершённого результата. При finish оставшиеся runs получают определённый terminal status, и поздний browser response не меняет итог интервью.
+`Worker.terminate()` stops the context when the approximately five-second timer expires, a question component unmounts, Finish removes the editor, or the client explicitly cancels. The main React/Monaco thread does not execute the snippet. A worker is created per run and retired after completion, with its transferred `MessagePort` closed. Worker completion is represented as `success`, `runtime_error`, `timeout`, `unsupported` or internal `cancelled`; duration is elapsed browser time, not a Node process exit code. [Worker termination](https://developer.mozilla.org/en-US/docs/Web/API/Worker/terminate)
 
-Результат клиента не является доверенным подтверждением правильности решения. Browser sandbox не получает session/invite tokens. Используется отдельный origin, проверяется источник messages, ограничиваются время, количество/размер логов и dependencies. Возможности iframe и CSP проверяются вместе с Sandpack integration; не предполагается, что произвольный sandbox attribute будет совместим с bundler. Hosted bundler является внешней зависимостью, и код задачи обрабатывается в его окружении; приватность и self-hosting рассматриваются перед использованием реальных интервью. [Sandpack bundler hosting](https://sandpack.codesandbox.io/docs/guides/hosting-the-bundler)
+The worker response carries CSP: `default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'`. `connect-src 'none'` blocks fetch/XHR/WebSocket-style connections. `'self'` remains in `script-src` for the lazy, same-origin TypeScript compiler chunk, so same-origin script loading is still allowed; external script hosts and ordinary network APIs are blocked. If deployment rewrites/serves the worker outside Next's configured route, the response policy must be preserved and verified. This is a useful browser boundary, not complete hostile-code isolation: workers still consume browser CPU/memory until the deadline, there is no hard memory budget, and the app cannot defend against browser-engine vulnerabilities. The worker receives only source/language/question/run IDs; it is not passed closures, DOM, Apollo clients or application tokens.
 
-API не исполняет пользовательский JavaScript через `eval`, `new Function` или `vm`. Позже browser adapter можно заменить отдельным isolated execution service, сохранив run lifecycle и ограниченный результат.
+`console.log`, `info`, `warn` and `error` are captured into ordered entries. Values use bounded readable serialization for strings, primitives, errors, arrays and objects; circular references are marked. Per-entry, entry-count and total-output caps append `[output truncated]`. The UI renders runtime failures in Output rather than throwing them into the parent React tree. Each result has `interviewQuestionId` and `runId`; the editor cancels and clears its result when its question unmounts or the interview finishes. Only the local initiator sees the result.
+
+The existing Prisma `CodeRun` model remains unchanged and unused. Client-reported output is not trusted evidence, and persisting it now would require new actor authorization, API operations, validation and retention rules. A later phase can define those guarantees if an interview timeline needs runs.
+
+Sandpack offers an integrated editor-independent live JavaScript/Node preview and supports a richer React project workflow, but introduces a larger runtime/bundler integration than a single-snippet runner needs. [Sandpack](https://sandpack.codesandbox.io/). WebContainers provide an in-browser Node.js filesystem/process environment; they require SharedArrayBuffer/cross-origin isolation, impose browser support constraints and may need a commercial API license. [WebContainers browser support](https://developer.stackblitz.com/platform/webcontainers/browser-support), [WebContainer API FAQ](https://developer.stackblitz.com/guides/user-guide/general-faqs). A first-party Worker is smaller and needs no external service or new package, and its termination API directly meets the infinite-loop requirement. Its narrower language support is why this phase does not claim React TSX execution.
 
 ## Границы будущих фаз
 
@@ -440,9 +450,10 @@ API не исполняет пользовательский JavaScript чере
 | 5    | Реализован: Yjs/WebSocket collaborative editing, per-question rooms, статус соединения и shared Reset    |
 | 6    | Реализован: guest invite/session, candidate GraphQL scope и авторизованный Yjs WS handshake              |
 | 7    | Завершён: question-scoped presence, Awareness identity, remote cursors/selections и cleanup              |
-| 8    | Sandpack adapter, immutable run snapshots, shared results и runtime limits                               |
-| 9    | Private notes, timeline, finish sequencing и result page                                                 |
-| 10   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
-| 11   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
+| 8    | Realtime Session Events                                                                                  |
+| 9    | Complete: CSP-restricted browser Code Runner; manual browser smoke passed                                |
+| 10   | Private notes, timeline, finish sequencing и result page                                                 |
+| 11   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
+| 12   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
 
 Проверки добавляются вместе с поведением, а не откладываются целиком до PHASE 10. PHASE 6/7 добавили authorization и ephemeral collaboration tests; DB-backed suites зависят от PostgreSQL и корректного package-manager/runtime окружения. Durable Yjs persistence, business events и interviewer login остаются будущей работой. Browser smoke PHASE 7 пропущен, так как доступный in-app browser runtime не предоставил браузерных контекстов. Commit и push не выполнялись.

@@ -10,12 +10,14 @@ export function ActiveInterviewQuestion({
   snapshot,
   interviewId,
   interviewQuestionId,
+  canRun,
   drafts,
   identity,
 }: {
   snapshot: NonNullable<ReturnType<typeof getQuestionSnapshot>>;
   interviewId: string;
   interviewQuestionId: string;
+  canRun: boolean;
   drafts: ReturnType<typeof useInterviewDraftStore>;
   identity: ParticipantIdentity | null;
 }) {
@@ -39,6 +41,7 @@ export function ActiveInterviewQuestion({
         interviewQuestionId={interviewQuestionId}
         language={snapshot.language}
         starterCode={snapshot.starterCode}
+        canRun={canRun}
         drafts={drafts}
         identity={identity}
       />

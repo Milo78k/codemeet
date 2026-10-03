@@ -10,3 +10,4 @@ next-env.d.ts
 packages/db/src/generated/
 apps/web/src/shared/api/generated/
 apps/web/public/monaco/
+apps/web/public/code-runner/

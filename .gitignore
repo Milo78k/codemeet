@@ -14,3 +14,4 @@ coverage/
 .DS_Store
 packages/db/src/generated/
 apps/web/public/monaco/
+apps/web/public/code-runner/

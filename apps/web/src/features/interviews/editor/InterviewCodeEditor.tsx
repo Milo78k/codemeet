@@ -5,6 +5,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 import type { ProgrammingLanguage } from '../../../shared/api/generated/graphql';
 import { languageLabels } from '../../../shared/lib/format';
+import { CodeOutput } from '../../code-runner/ui/CodeOutput';
+import { isCodeRunnerLanguageSupported } from '../../code-runner/model/execution';
+import { useCodeRunner } from '../../code-runner/useCodeRunner';
 import type { InterviewDraftStore } from './draft-store';
 import { EditorErrorBoundary } from './EditorErrorBoundary';
 import { getModelUri } from './language';
@@ -41,6 +44,7 @@ type InterviewCodeEditorProps = {
   starterCode: string;
   drafts: InterviewDraftStore;
   identity?: ParticipantIdentity | null;
+  canRun?: boolean;
   onEditorReady?: EditorReadyCallback;
 };
 
@@ -56,6 +60,7 @@ function QuestionCodeEditor({
   starterCode,
   drafts,
   identity,
+  canRun = false,
   onEditorReady,
   uri,
 }: InterviewCodeEditorProps & { uri: string }) {
@@ -84,6 +89,11 @@ function QuestionCodeEditor({
   const editor = useRef<EditorReadyContext['editor'] | null>(null);
   const cleanupExternal = useRef<(() => void) | void>(undefined);
   const resetButton = useRef<HTMLButtonElement>(null);
+  const codeRunner = useCodeRunner({
+    interviewQuestionId,
+    language,
+    enabled: canRun && ready,
+  });
 
   const editorReady = useCallback(
     (context: EditorReadyContext) => {
@@ -148,6 +158,13 @@ function QuestionCodeEditor({
     if (!model.current || !collaboration.reset()) return;
     closeReset();
   }
+  function runSnapshot() {
+    if (!canRun || !ready || !isCodeRunnerLanguageSupported(language) || !model.current) return;
+    // Monaco is bound to this question's Y.Text. Capture now; later remote or local edits
+    // cannot mutate the primitive string already sent to the execution worker.
+    const immutableSourceSnapshot = String(model.current.getValue());
+    codeRunner.run(immutableSourceSnapshot);
+  }
   const editorFailed = failed || Boolean(collaboration.error);
   const failure = (
     <div className={styles.failure} role="alert">
@@ -194,6 +211,19 @@ function QuestionCodeEditor({
         >
           Reset code
         </button>
+        <button
+          type="button"
+          className={styles.runButton}
+          disabled={
+            !canRun ||
+            !ready ||
+            !isCodeRunnerLanguageSupported(language) ||
+            codeRunner.state.status === 'running'
+          }
+          onClick={runSnapshot}
+        >
+          {codeRunner.state.status === 'running' ? 'Running…' : 'Run'}
+        </button>
       </div>
       <div className={styles.editorContainer}>
         {editorFailed ? (
@@ -212,6 +242,7 @@ function QuestionCodeEditor({
           </EditorErrorBoundary>
         )}
       </div>
+      <CodeOutput language={language} state={codeRunner.state} />
       <p className={styles.localNotice}>
         Edits sync live to other people in this interview session. They stay in this session only.
       </p>

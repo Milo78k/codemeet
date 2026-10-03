@@ -215,6 +215,7 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
             snapshot={activeSnapshot}
             interviewId={interview.id}
             interviewQuestionId={activeEntry.id}
+            canRun={interview.status === 'IN_PROGRESS'}
             drafts={drafts}
             identity={identity}
           />
