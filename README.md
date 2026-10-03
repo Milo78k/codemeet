@@ -1,12 +1,12 @@
 # CodeMeet
 
-CodeMeet — fullstack pet-project для технических интервью с совместным редактированием кода. Интервьюер выбирает задачи и приглашает кандидата по гостевой ссылке. Сейчас участники одной активной Question room видят общий редактор, присутствие, курсоры и выделения. Запуск кода, приватные заметки и результат интервью остаются в roadmap.
+CodeMeet — fullstack pet-project для технических интервью с совместным редактированием и локальным запуском кода. Интервьюер выбирает задачи и приглашает кандидата по гостевой ссылке. Участники активной Question room видят общий редактор, присутствие, курсоры и выделения; JavaScript и TypeScript можно запустить в браузерном Worker.
 
 Проект имеет собственный интерфейс и не использует дизайн, тексты или branding других платформ.
 
 ## Текущий этап
 
-**PHASE 8 — Realtime Session Events — завершена; manual browser smoke PASS.** Подключённые участники получают Interview-scoped уведомления о смене активного вопроса и завершении интервью. После уведомления клиент перечитывает canonical Interview через GraphQL, поэтому persistent business state остаётся в PostgreSQL. Interviewer пока использует TEMP DEMO AUTH; durable Yjs persistence, Auth.js и запуск кода остаются будущей работой.
+**PHASE 9 — Safe Code Runner — implementation and manual browser smoke PASS.** JavaScript and TypeScript run from an immutable snapshot of the current collaborative Monaco model in a separate browser Worker. React TSX is explicitly unsupported for execution. The API never executes user code; only the participant who clicked Run sees its output. See the [PHASE 9 report](docs/phase-9-report.md) for implementation and verification status.
 
 В репозитории настроены pnpm, Turborepo, TypeScript strict, ESLint и Prettier. Будущие библиотеки устанавливаются тогда, когда для них появляется функциональность.
 
@@ -16,7 +16,7 @@ CodeMeet — fullstack pet-project для технических интервь�
 - Создание интервью, выбор задач и гостевой вход кандидата без регистрации.
 - Monaco Editor с JavaScript, TypeScript и React/TSX; Yjs collaboration и remote cursors.
 - Presence, reconnect и синхронизация документов после краткого отключения.
-- Browser execution, console и React preview; результаты запуска доступны обоим участникам.
+- JavaScript/TypeScript browser execution и локальный console output; React TSX preview ещё не реализован.
 - Приватные заметки с backend authorization; итоговая страница с snapshots, runs и timeline.
 
 Эти пункты являются roadmap, а не уже доступными функциями.
@@ -33,7 +33,8 @@ flowchart LR
   Web <-->|"Y.Doc + Awareness /collaboration"| API
   Web <-->|"Session Events /session-events/:interviewId"| API
   API["apps/api: Yoga + realtime adapter"] --> DB[("PostgreSQL / Prisma")]
-  Web -.-> Runner["Sandpack: planned"]
+  Web -->|"immutable source snapshot"| Runner["CSP-restricted browser Worker"]
+  Runner -.->|"local result only"| Web
 ```
 
 Подробные решения, auth boundaries, persistence и обработка гонок: [docs/architecture.md](docs/architecture.md).
@@ -422,13 +423,13 @@ Yjs отвечает за concurrent text edits и слияние updates пос
 
 PHASE 5 покрывает concurrent edits, reconnect convergence и shared Reset; PHASE 6 добавляет identity/access gates; PHASE 7 добавляет ephemeral Awareness без изменения CRDT semantics. Локальный Y.Doc сохраняется при кратком reconnect, но живёт только в памяти API. Уже открытый socket не получает мгновенный revoke/status event, если session отозвали или interview завершён в другом процессе.
 
-## Future code execution
+## Code execution — PHASE 9
 
-Выбран Sandpack: он подходит для небольших JavaScript/TypeScript/React задач, browser preview и console. WebContainers дают browser Node.js, но требуют дополнительных условий cross-origin isolation. Подробные trade-offs и первичные ссылки находятся в архитектурном документе.
+При Run интерфейс сразу копирует текст активной Monaco-модели, связанной с Y.Text, и отправляет эту строку в отдельный Web Worker. Worker запускает только этот snapshot, собирает `console.log/info/warn/error`, ограничивает объём вывода и завершается после результата или deadline около 5 секунд. Переключение вопроса, Finish и unmount завершают текущий Worker. Worker response имеет CSP `connect-src 'none'`; source не отправляется GraphQL/API. В Y.Doc не записываются Run state и output, Apollo cache их не содержит.
 
-`CodeRunner.run({ language, files })` будет возвращать `{ stdout, stderr, exitCode, duration }`. Browser adapter можно заменить отдельным isolated execution service. Пользовательский код никогда не запускается через `eval`, `new Function` или `vm` в API процессе.
+Поддерживаются JavaScript и standalone TypeScript snippets. TypeScript транспилируется браузерным компилятором, загружаемым только при первом TypeScript Run; типовая проверка и внешние пакеты не входят в эту поддержку. React TSX показан как неподдерживаемый: для него нужен отдельный React preview и граф файлов. Итог запуска локален инициатору. Существующая Prisma-модель `CodeRun` пока не используется: клиентский результат не считается доверенным verdict, а persistence потребовала бы отдельного authorization и API-контракта.
 
-Sandpack sandbox не получает auth credentials. Для React preview отдельно определяется семантика окончания Run и `exitCode`. API сохраняет immutable snapshot и ограниченный результат от клиента; такой результат не является доверенным доказательством прохождения тестов. Hosted bundler — внешняя зависимость, privacy и runtime limits проверяются при интеграции.
+Это browser sandbox boundary для защиты UI/API от зависшего или случайно вредного сниппета, а не гарантия изоляции hostile code. Worker не получает application closures, DOM, токены или Apollo state; CSP блокирует сетевые подключения и nested workers. У приложения нет жёсткого контроля над памятью браузера и гарантий против browser-engine vulnerabilities. Подробные trade-offs и limitations: [docs/architecture.md](docs/architecture.md) и [docs/phase-9-report.md](docs/phase-9-report.md).
 
 ## Проверки и testing
 
@@ -486,11 +487,12 @@ PHASE 4 добавляет domain/model lifecycle tests и session editor behavi
 | 5    | Yjs/WebSocket collaborative editing и shared Reset                  | Реализовано   |
 | 6    | Guest invite, participant identity и WebSocket authorization        | Реализовано   |
 | 7    | Question-scoped presence, Awareness, remote cursors и selections    | Реализовано   |
-| 8    | Browser code execution и React preview                              | Запланировано |
-| 9    | Notes, timeline, finish и result page                               | Запланировано |
-| 10   | Расширение frontend/backend/realtime тестов                         | Запланировано |
-| 11   | Docker Compose, GitHub Actions, финальный README и MVP verification | Запланировано |
+| 8    | Realtime Session Events                                             | Реализовано   |
+| 9    | Browser Code Runner для JavaScript/TypeScript                       | Реализовано   |
+| 10   | Private notes, timeline и result page                               | Запланировано |
+| 11   | Расширение permissions/race/realtime regression tests               | Запланировано |
+| 12   | Docker Compose, GitHub Actions и MVP verification                   | Запланировано |
 
 Docker Compose сейчас поднимает только PostgreSQL. CI и Docker images web/api остаются для PHASE 11. За пределами MVP: видео/аудио, AI scoring, ATS, платежи, email, mobile IDE, другие runtime languages, Kubernetes, полный character replay и whiteboard.
 
-PHASE 7 завершает ephemeral awareness для активной Question room. Ограничения: TEMP DEMO AUTH остаётся общим interviewer principal; candidate обновляет Session, чтобы увидеть смену active question; уже открытые sockets не получают немедленный revoke/finish event; Y.Doc теряется при restart API. Browser smoke для двух реальных browser contexts не запускался, так как in-app browser runtime не предоставил контекстов. Durable Yjs persistence, business events и code execution остаются будущими фазами.
+PHASE 7, PHASE 8 и PHASE 9 browser smoke пройдены. Ограничения текущего MVP: TEMP DEMO AUTH остаётся общим interviewer principal; Y.Doc теряется при restart API; Code Runner исполняет один файл без внешних пакетов, а React TSX preview и durable `CodeRun` persistence отложены. PHASE 9 verification details and limitations are recorded in `docs/phase-9-report.md`.

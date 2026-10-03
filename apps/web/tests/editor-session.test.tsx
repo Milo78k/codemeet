@@ -189,6 +189,7 @@ describe('editable interview session', () => {
     expect(await screen.findByText('Interview is finished')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Code editor' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reset code' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
   });
 
   test('editor failure shows a controlled fallback and Retry can load the editor', async () => {

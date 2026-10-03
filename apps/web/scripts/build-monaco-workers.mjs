@@ -5,6 +5,7 @@ import { build } from 'esbuild';
 const require = createRequire(import.meta.url);
 const webDirectory = fileURLToPath(new URL('../', import.meta.url));
 const outputDirectory = fileURLToPath(new URL('../public/monaco/', import.meta.url));
+const runnerOutputDirectory = fileURLToPath(new URL('../public/code-runner/', import.meta.url));
 
 // These standalone module workers are served by Next from the same origin.
 // Bundling them separately avoids both an AMD loader and a CDN dependency.
@@ -17,6 +18,24 @@ await build({
   outdir: outputDirectory,
   bundle: true,
   splitting: false,
+  platform: 'browser',
+  format: 'esm',
+  target: 'es2022',
+  minify: true,
+  logLevel: 'info',
+});
+
+// The runner is a separate browser module worker. TypeScript is an async import so
+// its compiler chunk is fetched only when someone runs a TypeScript question.
+await build({
+  absWorkingDir: webDirectory,
+  entryPoints: {
+    'runner.worker': 'src/features/code-runner/worker/runner.worker.ts',
+  },
+  outdir: runnerOutputDirectory,
+  bundle: true,
+  splitting: true,
+  chunkNames: 'chunks/[name]-[hash]',
   platform: 'browser',
   format: 'esm',
   target: 'es2022',

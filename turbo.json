@@ -23,7 +23,13 @@
         "$TURBO_ROOT$/.env*",
         "$TURBO_ROOT$/apps/api/src/graphql/schema.graphql"
       ],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "public/monaco/**"],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**",
+        "public/monaco/**",
+        "public/code-runner/**"
+      ],
       "env": ["NEXT_PUBLIC_GRAPHQL_URL", "NEXT_PUBLIC_REALTIME_URL"]
     },
     "lint": {},
