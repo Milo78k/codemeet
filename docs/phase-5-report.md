@@ -37,7 +37,7 @@ API проверяет origin, room identity, статус Interview, attachment
 | Shared, API и web build/typecheck               | PASS; выполнялись последовательные package проверки                                                                                  |
 | Prisma schema validation                        | PASS                                                                                                                                 |
 | Root lint                                       | PASS                                                                                                                                 |
-| Prettier format check                           | PASS для изменённых документационных файлов после финального форматирования                                                         |
+| Prettier format check                           | PASS для изменённых документационных файлов после финального форматирования                                                          |
 | Frontend Jest/RTL                               | PASS: 77 tests, 11 suites                                                                                                            |
 | API transport/Yjs/CORS без PostgreSQL           | PASS: 23 tests, 3 suites                                                                                                             |
 | Production build                                | PASS: Prisma, API и Next.js/Turbopack                                                                                                |

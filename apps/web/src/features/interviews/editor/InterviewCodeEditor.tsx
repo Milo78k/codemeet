@@ -9,6 +9,8 @@ import type { InterviewDraftStore } from './draft-store';
 import { EditorErrorBoundary } from './EditorErrorBoundary';
 import { getModelUri } from './language';
 import type { EditorReadyCallback, EditorReadyContext } from './MonacoAdapter';
+import { ParticipantPresence } from './ParticipantPresence';
+import type { ParticipantIdentity } from './presence';
 import { ResetCodeDialog } from './ResetCodeDialog';
 import { useCollaborativeQuestion } from './useCollaborativeQuestion';
 
@@ -38,6 +40,7 @@ type InterviewCodeEditorProps = {
   language: ProgrammingLanguage;
   starterCode: string;
   drafts: InterviewDraftStore;
+  identity?: ParticipantIdentity | null;
   onEditorReady?: EditorReadyCallback;
 };
 
@@ -52,6 +55,7 @@ function QuestionCodeEditor({
   language,
   starterCode,
   drafts,
+  identity,
   onEditorReady,
   uri,
 }: InterviewCodeEditorProps & { uri: string }) {
@@ -67,6 +71,7 @@ function QuestionCodeEditor({
     interviewId,
     interviewQuestionId,
     starterCode,
+    identity: identity ?? null,
     onChange: change,
   });
   const bindCollaboration = collaboration.bind;
@@ -160,6 +165,7 @@ function QuestionCodeEditor({
 
   return (
     <section className={styles.editorSection} aria-label="Question code">
+      <ParticipantPresence participants={collaboration.participants} />
       <div className={styles.toolbar}>
         <div className={styles.toolbarInfo}>
           <span className={styles.language}>{languageLabels[language]}</span>

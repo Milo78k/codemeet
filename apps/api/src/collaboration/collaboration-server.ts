@@ -31,7 +31,16 @@ type Room = {
   awareness: awarenessProtocol.Awareness;
   connections: Set<WebSocket>;
   clientIdsByConnection: Map<WebSocket, Set<number>>;
+  clientIdByConnection: Map<WebSocket, number>;
+  awarenessOwners: Map<number, WebSocket>;
+  identitiesByConnection: Map<WebSocket, TrustedParticipantIdentity>;
   disposeListeners: () => void;
+};
+
+type TrustedParticipantIdentity = {
+  participantId: string;
+  displayName: string;
+  role: 'INTERVIEWER' | 'CANDIDATE';
 };
 
 type RoomConnectionConfig = {
@@ -59,12 +68,112 @@ function broadcast(room: Room, data: Uint8Array, except?: WebSocket): void {
   }
 }
 
+type AwarenessEntry = { clientId: number; clock: number; state: unknown };
+
+function readAwarenessEntries(update: Uint8Array): AwarenessEntry[] {
+  const decoder = decoding.createDecoder(update);
+  const count = decoding.readVarUint(decoder);
+  const entries: AwarenessEntry[] = [];
+  for (let index = 0; index < count; index += 1) {
+    entries.push({
+      clientId: decoding.readVarUint(decoder),
+      clock: decoding.readVarUint(decoder),
+      state: JSON.parse(decoding.readVarString(decoder)) as unknown,
+    });
+  }
+  return entries;
+}
+
+function writeAwarenessEntries(entries: readonly AwarenessEntry[]): Uint8Array {
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, entries.length);
+  for (const entry of entries) {
+    encoding.writeVarUint(encoder, entry.clientId);
+    encoding.writeVarUint(encoder, entry.clock);
+    encoding.writeVarString(encoder, JSON.stringify(entry.state));
+  }
+  return encoding.toUint8Array(encoder);
+}
+
+function sameAwarenessState(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+function serializeAwarenessRelativePosition(
+  position: ReturnType<typeof Y.createRelativePositionFromJSON>,
+) {
+  return {
+    type: position.type ? { client: position.type.client, clock: position.type.clock } : null,
+    tname: position.tname,
+    item: position.item ? { client: position.item.client, clock: position.item.clock } : null,
+    assoc: position.assoc,
+  };
+}
+
+function normalizeAwarenessState(
+  state: unknown,
+  identity: TrustedParticipantIdentity,
+  doc: Y.Doc,
+): Record<string, unknown> | null {
+  if (state === null) return null;
+  if (typeof state !== 'object' || Array.isArray(state)) return { user: identity };
+
+  const candidate = state as { selection?: unknown };
+  const selection = candidate.selection;
+  if (typeof selection !== 'object' || selection === null || Array.isArray(selection)) {
+    return { user: identity };
+  }
+
+  try {
+    const positions = selection as { anchor?: unknown; head?: unknown };
+    if (!positions.anchor || !positions.head) return { user: identity };
+    const anchor = Y.createRelativePositionFromJSON(positions.anchor);
+    const head = Y.createRelativePositionFromJSON(positions.head);
+    if (
+      anchor.type !== null ||
+      anchor.tname !== 'code' ||
+      head.type !== null ||
+      head.tname !== 'code'
+    ) {
+      return { user: identity };
+    }
+    const anchorPosition = Y.createAbsolutePositionFromRelativePosition(anchor, doc);
+    const headPosition = Y.createAbsolutePositionFromRelativePosition(head, doc);
+    const text = doc.getText('code');
+    if (
+      anchorPosition?.type !== text ||
+      headPosition?.type !== text ||
+      anchorPosition.index < 0 ||
+      headPosition.index < 0
+    ) {
+      return { user: identity };
+    }
+    return {
+      user: identity,
+      selection: {
+        // y-monaco consumes these JSON objects directly and distinguishes an
+        // explicit null item/type from a missing field at text boundaries.
+        anchor: serializeAwarenessRelativePosition(anchor),
+        head: serializeAwarenessRelativePosition(head),
+      },
+    };
+  } catch {
+    // Ignore malformed cursor metadata while preserving the authorized presence.
+    return { user: identity };
+  }
+}
+
 function removeConnection(room: Room, connection: WebSocket): void {
   room.connections.delete(connection);
+  room.identitiesByConnection.delete(connection);
+  room.clientIdByConnection.delete(connection);
   const clientIds = room.clientIdsByConnection.get(connection);
   room.clientIdsByConnection.delete(connection);
   if (clientIds && clientIds.size > 0) {
     awarenessProtocol.removeAwarenessStates(room.awareness, [...clientIds], connection);
+  }
+  for (const [clientId, owner] of room.awarenessOwners) {
+    if (owner === connection) room.awarenessOwners.delete(clientId);
   }
 }
 
@@ -140,11 +249,16 @@ export function attachCollaborationWebSocket(
         doc.transact(() => doc.getText('code').insert(0, starterCode), 'snapshot-seed');
       }
       const awareness = new awarenessProtocol.Awareness(doc);
+      // The server is a transport, not a participant in its own room.
+      awareness.setLocalState(null);
       const room: Room = {
         doc,
         awareness,
         connections: new Set(),
         clientIdsByConnection: new Map(),
+        clientIdByConnection: new Map(),
+        awarenessOwners: new Map(),
+        identitiesByConnection: new Map(),
         disposeListeners: () => {
           doc.off('update', updateHandler);
           awareness.off('update', awarenessHandler);
@@ -164,7 +278,9 @@ export function attachCollaborationWebSocket(
           const owned = room.clientIdsByConnection.get(origin);
           for (const id of change.added) owned?.add(id);
           for (const id of change.updated) owned?.add(id);
-          for (const id of change.removed) owned?.delete(id);
+        }
+        for (const id of change.removed) {
+          room.clientIdsByConnection.get(origin as WebSocket)?.delete(id);
         }
         if (changedIds.length === 0) return;
         const encoder = createMessage(WS_MESSAGE_AWARENESS);
@@ -252,6 +368,7 @@ export function attachCollaborationWebSocket(
           }
 
           let candidateExpiresAt: Date | null = null;
+          let trustedIdentity: TrustedParticipantIdentity | null = null;
           if (message.role === 'candidate' && typeof message.token === 'string') {
             const session = await findValidParticipantSession(
               connectionConfig.prisma,
@@ -269,6 +386,11 @@ export function attachCollaborationWebSocket(
               return;
             }
             candidateExpiresAt = session.expiresAt;
+            trustedIdentity = {
+              participantId: session.participant.id,
+              displayName: session.participant.displayName,
+              role: 'CANDIDATE',
+            };
           } else if (message.role === 'interviewer' && message.token === null) {
             const context = createApiContext(
               connectionConfig.prisma,
@@ -281,17 +403,26 @@ export function attachCollaborationWebSocket(
                 userId: user.id,
                 role: 'INTERVIEWER',
               },
-              select: { id: true },
+              select: { id: true, displayName: true, role: true },
             });
             if (!participant) {
               reject(CLOSE_FORBIDDEN, 'Interviewer cannot access this room.');
               return;
             }
+            trustedIdentity = {
+              participantId: participant.id,
+              displayName: participant.displayName,
+              role: 'INTERVIEWER',
+            };
           } else {
             reject(CLOSE_UNAUTHENTICATED, 'Participant session is invalid or expired.');
             return;
           }
 
+          if (!trustedIdentity) {
+            reject(CLOSE_UNAUTHENTICATED, 'Authentication is required.');
+            return;
+          }
           const room = await getOrCreateRoom(roomId, identity);
           if (connection.readyState !== WebSocket.OPEN) return;
           authenticated = true;
@@ -301,6 +432,7 @@ export function attachCollaborationWebSocket(
           const clientIds = new Set<number>();
           room.connections.add(connection);
           room.clientIdsByConnection.set(connection, clientIds);
+          room.identitiesByConnection.set(connection, trustedIdentity);
           const handleRoomMessage = (roomData: RawData) => {
             try {
               const decoder = decoding.createDecoder(rawDataToUint8Array(roomData));
@@ -314,11 +446,93 @@ export function attachCollaborationWebSocket(
                 return;
               }
               if (messageType === WS_MESSAGE_AWARENESS) {
-                awarenessProtocol.applyAwarenessUpdate(
-                  room.awareness,
-                  decoding.readVarUint8Array(decoder),
-                  connection,
-                );
+                const awarenessUpdate = decoding.readVarUint8Array(decoder);
+                const entries = readAwarenessEntries(awarenessUpdate);
+                const identityForConnection = room.identitiesByConnection.get(connection);
+                const existingClientIds = room.clientIdsByConnection.get(connection);
+                const assignedClientId = room.clientIdByConnection.get(connection);
+                if (!identityForConnection || !existingClientIds) {
+                  connection.close(1008, 'Invalid awareness client identity.');
+                  return;
+                }
+                const acceptedEntries: AwarenessEntry[] = [];
+                const seenClientIds = new Set<number>();
+                let invalidClientIdentity = false;
+                for (const entry of entries) {
+                  if (seenClientIds.has(entry.clientId)) {
+                    invalidClientIdentity = true;
+                    break;
+                  }
+                  seenClientIds.add(entry.clientId);
+                  if (entry.clientId === room.awareness.clientID) {
+                    invalidClientIdentity = true;
+                    break;
+                  }
+                  let existingOwner = room.awarenessOwners.get(entry.clientId);
+                  if (
+                    existingOwner &&
+                    existingOwner !== connection &&
+                    existingOwner.readyState !== WebSocket.OPEN
+                  ) {
+                    removeConnection(room, existingOwner);
+                    existingOwner = undefined;
+                  }
+                  const currentClock = room.awareness.meta.get(entry.clientId)?.clock ?? 0;
+                  const currentState = room.awareness.getStates().get(entry.clientId) ?? null;
+                  if (
+                    !existingOwner &&
+                    currentState === null &&
+                    entry.state === null &&
+                    entry.clock <= currentClock
+                  ) {
+                    // Removal echoes can arrive after the owning socket has closed.
+                    continue;
+                  }
+                  if (existingOwner && existingOwner !== connection) {
+                    const ownerIdentity = room.identitiesByConnection.get(existingOwner);
+                    if (!ownerIdentity || entry.clock > currentClock) {
+                      invalidClientIdentity = true;
+                      break;
+                    }
+                    const echoedState = normalizeAwarenessState(
+                      entry.state,
+                      ownerIdentity,
+                      room.doc,
+                    );
+                    if (
+                      entry.clock === currentClock &&
+                      !sameAwarenessState(echoedState, currentState)
+                    ) {
+                      invalidClientIdentity = true;
+                      break;
+                    }
+                    // y-websocket relays received Awareness changes back upstream.
+                    // Ignore stale or exact no-op echoes without assigning foreign IDs.
+                    continue;
+                  }
+                  if (
+                    (assignedClientId !== undefined && assignedClientId !== entry.clientId) ||
+                    (room.awarenessOwners.has(entry.clientId) &&
+                      room.awarenessOwners.get(entry.clientId) !== connection)
+                  ) {
+                    invalidClientIdentity = true;
+                    break;
+                  }
+                  room.clientIdByConnection.set(connection, entry.clientId);
+                  room.awarenessOwners.set(entry.clientId, connection);
+                  acceptedEntries.push(entry);
+                }
+                if (invalidClientIdentity) {
+                  connection.close(1008, 'Invalid awareness client identity.');
+                  return;
+                }
+                if (acceptedEntries.length > 0) {
+                  const trustedUpdate = awarenessProtocol.modifyAwarenessUpdate(
+                    writeAwarenessEntries(acceptedEntries),
+                    (state) => normalizeAwarenessState(state, identityForConnection, room.doc),
+                  );
+                  awarenessProtocol.applyAwarenessUpdate(room.awareness, trustedUpdate, connection);
+                }
                 return;
               }
               if (messageType === WS_MESSAGE_QUERY_AWARENESS) {
@@ -366,7 +580,7 @@ export function attachCollaborationWebSocket(
           if (connectionConfig.nodeEnv === 'development') {
             console.info(`[realtime] Client connected: ${roomId}`);
           }
-          connection.send(new TextEncoder().encode(JSON.stringify({ type: 'authenticated' })));
+          connection.send(JSON.stringify({ type: 'authenticated' }));
           const syncEncoder = createMessage(WS_MESSAGE_SYNC);
           syncProtocol.writeSyncStep1(syncEncoder, room.doc);
           connection.send(encoding.toUint8Array(syncEncoder));

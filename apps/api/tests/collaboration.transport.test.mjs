@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
+import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { WebSocket } from 'ws';
@@ -12,6 +13,7 @@ import { createCollaborationRoomId } from '../../../packages/shared/dist/index.j
 const origin = 'http://localhost:3000';
 const snapshots = new Map();
 const participantSessions = new Map();
+let eventWrites = 0;
 let server;
 let baseUrl;
 
@@ -31,7 +33,16 @@ const prisma = {
     },
   },
   interviewParticipant: {
-    findFirst: async () => ({ id: 'demo-interviewer-participant' }),
+    findFirst: async () => ({
+      id: 'demo-interviewer-participant',
+      displayName: 'Demo Interviewer',
+      role: 'INTERVIEWER',
+    }),
+  },
+  interviewEvent: {
+    create: async () => {
+      eventWrites += 1;
+    },
   },
   participantSession: {
     findUnique: async ({ where }) => participantSessions.get(where.tokenHash) ?? null,
@@ -48,6 +59,18 @@ function addSnapshot(overrides = {}) {
     ...overrides,
   };
   snapshots.set(`${interviewId}/${interviewQuestionId}`, record);
+  return { identity, record, roomId: createCollaborationRoomId(identity) };
+}
+
+function addQuestionSnapshot(interviewId, overrides = {}) {
+  const interviewQuestionId = randomUUID();
+  const record = {
+    status: 'IN_PROGRESS',
+    starterCode: 'const value = 1;\n',
+    ...overrides,
+  };
+  snapshots.set(`${interviewId}/${interviewQuestionId}`, record);
+  const identity = { interviewId, interviewQuestionId };
   return { identity, record, roomId: createCollaborationRoomId(identity) };
 }
 
@@ -69,6 +92,8 @@ function openRoom(
     `${baseUrl.replace('http:', 'ws:')}/collaboration/${encodeURIComponent(roomId)}`,
     { origin: requestOrigin },
   );
+  const awareness = new awarenessProtocol.Awareness(doc);
+  awareness.setLocalState(null);
   const closed = new Promise((resolve) => {
     socket.once('close', (code, reason) => resolve([code, reason]));
   });
@@ -80,6 +105,19 @@ function openRoom(
     socket.send(encoding.toUint8Array(encoder));
   };
   doc.on('update', onUpdate);
+  const onAwarenessUpdate = (change) => {
+    if (socket.readyState !== WebSocket.OPEN) return;
+    const clientIds = [...change.added, ...change.updated, ...change.removed];
+    if (clientIds.length === 0) return;
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, 1);
+    encoding.writeVarUint8Array(
+      encoder,
+      awarenessProtocol.encodeAwarenessUpdate(awareness, clientIds),
+    );
+    socket.send(encoding.toUint8Array(encoder));
+  };
+  awareness.on('update', onAwarenessUpdate);
   socket.on('open', () => {
     if (auth !== null) socket.send(JSON.stringify(auth));
   });
@@ -94,18 +132,30 @@ function openRoom(
       encoding.writeVarUint(encoder, 0);
       syncProtocol.writeSyncStep1(encoder, doc);
       socket.send(encoding.toUint8Array(encoder));
+      const query = encoding.createEncoder();
+      encoding.writeVarUint(query, 3);
+      socket.send(encoding.toUint8Array(query));
       return;
     }
     try {
       const decoder = decoding.createDecoder(new Uint8Array(data));
-      if (decoding.readVarUint(decoder) !== 0) return;
+      const frameType = decoding.readVarUint(decoder);
+      if (frameType === 1) {
+        awarenessProtocol.applyAwarenessUpdate(
+          awareness,
+          decoding.readVarUint8Array(decoder),
+          socket,
+        );
+        return;
+      }
+      if (frameType !== 0) return;
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, 0);
-      const messageType = syncProtocol.readSyncMessage(decoder, encoder, doc, socket);
+      const syncMessageType = syncProtocol.readSyncMessage(decoder, encoder, doc, socket);
       if (encoding.length(encoder) > 1 && socket.readyState === WebSocket.OPEN) {
         socket.send(encoding.toUint8Array(encoder));
       }
-      if (messageType === syncProtocol.messageYjsSyncStep2) {
+      if (syncMessageType === syncProtocol.messageYjsSyncStep2) {
         syncedState = true;
         clearTimeout(timeout);
         resolveSync();
@@ -123,12 +173,15 @@ function openRoom(
   socket.on('error', rejectSync);
   return {
     doc,
+    awareness,
     socket,
     synced,
     closed,
     close() {
       doc.off('update', onUpdate);
+      awareness.off('update', onAwarenessUpdate);
       if (socket.readyState === WebSocket.OPEN) socket.close();
+      awareness.destroy();
     },
   };
 }
@@ -139,7 +192,13 @@ function candidateCredential(interviewId, overrides = {}) {
   participantSessions.set(tokenHash, {
     revokedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
-    participant: { id: randomUUID(), interviewId, role: 'CANDIDATE', userId: null },
+    participant: {
+      id: randomUUID(),
+      interviewId,
+      role: 'CANDIDATE',
+      displayName: 'Anton Candidate',
+      userId: null,
+    },
     ...overrides,
   });
   return { type: 'authenticate', role: 'candidate', token };
@@ -153,6 +212,25 @@ async function expectSameText(...clients) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Clients did not converge.');
+}
+
+async function expectAwareness(client, participantId, present = true) {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const found = [...client.awareness.getStates().values()].some(
+      (state) => state.user?.participantId === participantId,
+    );
+    if (found === present) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(
+    `Awareness participant ${participantId} did not become ${present ? 'present' : 'absent'}.`,
+  );
+}
+
+function participantForCredential(auth) {
+  const tokenHash = createHash('sha256').update(auth.token).digest('hex');
+  return participantSessions.get(tokenHash).participant;
 }
 
 beforeAll(async () => {
@@ -199,6 +277,118 @@ describe('Yjs WebSocket transport', () => {
     expect(code).toBe(4403);
     await expect(denied.synced).rejects.toThrow('WebSocket closed before sync');
     denied.close();
+  });
+
+  test('authoritative Awareness is room-scoped, ephemeral, and removed on disconnect', async () => {
+    const { identity, record, roomId } = addSnapshot();
+    const questionTwo = addQuestionSnapshot(identity.interviewId);
+    const credential = candidateCredential(identity.interviewId);
+    const candidateIdentity = participantForCredential(credential);
+    const eventCountBefore = eventWrites;
+    const candidate = openRoom(roomId, new Y.Doc(), origin, credential);
+    const interviewer = openRoom(roomId);
+    const otherQuestionInterviewer = openRoom(questionTwo.roomId);
+    await Promise.all([candidate.synced, interviewer.synced, otherQuestionInterviewer.synced]);
+
+    const initialCode = record.starterCode;
+    const anchor = JSON.parse(
+      JSON.stringify(Y.createRelativePositionFromTypeIndex(candidate.doc.getText('code'), 4)),
+    );
+    const head = JSON.parse(
+      JSON.stringify(
+        Y.createRelativePositionFromTypeIndex(
+          candidate.doc.getText('code'),
+          candidate.doc.getText('code').length,
+        ),
+      ),
+    );
+    expect(head.item).toBeNull();
+    candidate.awareness.setLocalState({
+      user: { participantId: 'spoofed', displayName: 'Attacker', role: 'INTERVIEWER' },
+      sessionToken: credential.token,
+      permissions: { canFinish: true },
+      selection: { anchor, head },
+    });
+    await expectAwareness(interviewer, candidateIdentity.id);
+    await expectAwareness(otherQuestionInterviewer, candidateIdentity.id, false);
+    const trustedCandidate = [...interviewer.awareness.getStates().values()].find(
+      (state) => state.user?.participantId === candidateIdentity.id,
+    );
+    expect(trustedCandidate?.user).toEqual({
+      participantId: candidateIdentity.id,
+      displayName: 'Anton Candidate',
+      role: 'CANDIDATE',
+    });
+    expect(trustedCandidate?.selection).toEqual({ anchor, head });
+    expect(() =>
+      Y.createAbsolutePositionFromRelativePosition(
+        trustedCandidate.selection.head,
+        interviewer.doc,
+      ),
+    ).not.toThrow();
+    expect(trustedCandidate).not.toHaveProperty('sessionToken');
+    expect(trustedCandidate).not.toHaveProperty('permissions');
+    expect(JSON.stringify(trustedCandidate)).not.toContain(credential.token);
+    expect(candidate.doc.getText('code').toString()).toBe(initialCode);
+    expect(interviewer.doc.getText('code').toString()).toBe(initialCode);
+    expect(eventWrites).toBe(eventCountBefore);
+
+    interviewer.awareness.setLocalState({
+      user: { participantId: 'forged', displayName: 'Forged Candidate', role: 'CANDIDATE' },
+    });
+    await expectAwareness(candidate, 'demo-interviewer-participant');
+    const trustedInterviewer = [...candidate.awareness.getStates().values()].find(
+      (state) => state.user?.participantId === 'demo-interviewer-participant',
+    );
+    expect(trustedInterviewer?.user).toEqual({
+      participantId: 'demo-interviewer-participant',
+      displayName: 'Demo Interviewer',
+      role: 'INTERVIEWER',
+    });
+    await expectSameText(candidate, interviewer);
+
+    candidate.close();
+    await expectAwareness(interviewer, candidateIdentity.id, false);
+    expect(interviewer.socket.readyState).toBe(WebSocket.OPEN);
+    interviewer.close();
+    otherQuestionInterviewer.close();
+  });
+
+  test('rejects a WebSocket trying to claim another connection Awareness clientId', async () => {
+    const { roomId } = addSnapshot();
+    const first = openRoom(roomId);
+    const second = openRoom(roomId);
+    await Promise.all([first.synced, second.synced]);
+    first.awareness.setLocalState({
+      user: {
+        participantId: 'demo-interviewer-participant',
+        displayName: 'Demo',
+        role: 'INTERVIEWER',
+      },
+    });
+    await expectAwareness(second, 'demo-interviewer-participant');
+    const firstClientId = first.awareness.clientID;
+    const maliciousUpdateEncoder = encoding.createEncoder();
+    encoding.writeVarUint(maliciousUpdateEncoder, 1);
+    encoding.writeVarUint(maliciousUpdateEncoder, firstClientId);
+    encoding.writeVarUint(
+      maliciousUpdateEncoder,
+      (first.awareness.meta.get(firstClientId)?.clock ?? 0) + 1,
+    );
+    encoding.writeVarString(
+      maliciousUpdateEncoder,
+      JSON.stringify({
+        user: { participantId: 'forged', displayName: 'Forged', role: 'CANDIDATE' },
+      }),
+    );
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, 1);
+    encoding.writeVarUint8Array(encoder, encoding.toUint8Array(maliciousUpdateEncoder));
+    second.socket.send(encoding.toUint8Array(encoder));
+    const [code] = await second.closed;
+    expect(code).toBe(1008);
+    first.close();
+    second.close();
   });
 
   test.each([
