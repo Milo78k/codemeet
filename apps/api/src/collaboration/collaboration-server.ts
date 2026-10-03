@@ -567,7 +567,7 @@ export function attachCollaborationWebSocket(
           if (connectionConfig.nodeEnv === 'development') {
             console.info(`[realtime] Client connected: ${roomId}`);
           }
-          connection.send(new TextEncoder().encode(JSON.stringify({ type: 'authenticated' })));
+          connection.send(JSON.stringify({ type: 'authenticated' }));
           const syncEncoder = createMessage(WS_MESSAGE_SYNC);
           syncProtocol.writeSyncStep1(syncEncoder, room.doc);
           connection.send(encoding.toUint8Array(syncEncoder));

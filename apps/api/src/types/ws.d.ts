@@ -10,7 +10,7 @@ declare module 'ws' {
     readonly readyState: number;
     pause(): void;
     resume(): void;
-    send(data: Uint8Array): void;
+    send(data: string | Uint8Array): void;
     close(code?: number, reason?: string): void;
     terminate(): void;
   }

@@ -76,6 +76,29 @@ function expectError(result, code) {
   expect(result.errors[0].message).not.toMatch(/[A-Za-z0-9_-]{43}/);
 }
 
+function expectUnauthorizedCandidateQuery(result) {
+  expect(result.errors).toHaveLength(2);
+  expect(
+    result.errors.map(({ message, extensions, path }) => ({
+      message,
+      code: extensions.code,
+      path,
+    })),
+  ).toEqual([
+    {
+      message: 'This participant session is invalid or expired.',
+      code: 'UNAUTHENTICATED',
+      path: ['currentParticipant'],
+    },
+    {
+      message: 'This participant session is invalid or expired.',
+      code: 'UNAUTHENTICATED',
+      path: ['interview'],
+    },
+  ]);
+  expect(JSON.stringify(result.errors)).not.toMatch(/[A-Za-z0-9_-]{43}/);
+}
+
 async function createInProgressInterview() {
   const interview = await createInterview(prisma, demoUser, {
     title: `Guest test ${randomUUID()}`,
@@ -310,9 +333,8 @@ describe('guest invite and participant authorization', () => {
     expect(candidateData.data.interview.questions).toHaveLength(1);
     expect(candidateData.data.interview.questions[0].question.id).toBe(questionId);
     expect(candidateData.data.interview.questions[0].question.createdBy).toBeNull();
-    expectError(
+    expectUnauthorizedCandidateQuery(
       await execute(candidateInterviewQuery, { id: interviewId }, 'z'.repeat(43)),
-      'UNAUTHENTICATED',
     );
 
     const otherInterviewId = await createInProgressInterview();
@@ -344,9 +366,8 @@ describe('guest invite and participant authorization', () => {
       where: { tokenHash },
       data: { expiresAt: new Date(Date.now() - 1_000) },
     });
-    expectError(
+    expectUnauthorizedCandidateQuery(
       await execute(candidateInterviewQuery, { id: interviewId }, token),
-      'UNAUTHENTICATED',
     );
   });
 
@@ -394,14 +415,14 @@ describe('guest invite and participant authorization', () => {
       where: { tokenHash },
       data: { revokedAt: new Date() },
     });
-    expectError(
+    expectUnauthorizedCandidateQuery(
       await execute(candidateInterviewQuery, { id: interviewId }, joined.participantSessionToken),
-      'UNAUTHENTICATED',
     );
     const attachment = await prisma.interviewQuestion.findFirstOrThrow({ where: { interviewId } });
     const roomId = createCollaborationRoomId({ interviewId, interviewQuestionId: attachment.id });
     const denied = connectRoom(roomId, joined.participantSessionToken);
     const [code] = await denied.closed;
     expect(code).toBe(4401);
+    await expect(denied.synced).rejects.toThrow('WebSocket closed (4401).');
   });
 });

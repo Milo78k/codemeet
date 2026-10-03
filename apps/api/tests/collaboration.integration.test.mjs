@@ -50,20 +50,36 @@ async function createStartedInterview(question = questions[0]) {
 }
 
 function openRoom(roomId, doc = new Y.Doc()) {
-  let socket;
-  let syncedResolve;
-  let syncedReject;
-  const synced = new Promise((resolve, reject) => {
-    syncedResolve = resolve;
-    syncedReject = reject;
-  });
-  const timeout = setTimeout(() => syncedReject(new Error('WebSocket sync timed out.')), 5_000);
-  socket = new WebSocket(
+  const socket = new WebSocket(
     `${baseUrl.replace('http:', 'ws:')}/collaboration/${encodeURIComponent(roomId)}`,
     {
       origin,
     },
   );
+  let syncedResolve;
+  let syncedReject;
+  let settled = false;
+  const synced = new Promise((resolve, reject) => {
+    syncedResolve = resolve;
+    syncedReject = reject;
+  });
+  const timeout = setTimeout(() => rejectSynced(new Error('WebSocket sync timed out.')), 5_000);
+  const resolveSynced = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeout);
+    syncedResolve();
+  };
+  const rejectSynced = (error) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeout);
+    doc.off('update', sendUpdate);
+    syncedReject(error);
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close();
+    }
+  };
   const sendUpdate = (update, updateOrigin) => {
     if (updateOrigin === socket || socket.readyState !== WebSocket.OPEN) return;
     const encoder = encoding.createEncoder();
@@ -73,12 +89,25 @@ function openRoom(roomId, doc = new Y.Doc()) {
   };
   doc.on('update', sendUpdate);
   socket.on('open', () => {
-    const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 0);
-    syncProtocol.writeSyncStep1(encoder, doc);
-    socket.send(encoding.toUint8Array(encoder));
+    socket.send(JSON.stringify({ type: 'authenticate', role: 'interviewer', token: null }));
   });
-  socket.on('message', (data) => {
+  socket.on('message', (data, isBinary) => {
+    if (!isBinary) {
+      try {
+        const message = JSON.parse(data.toString());
+        if (message.type !== 'authenticated') {
+          rejectSynced(new Error('WebSocket authentication was rejected.'));
+          return;
+        }
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, 0);
+        syncProtocol.writeSyncStep1(encoder, doc);
+        socket.send(encoding.toUint8Array(encoder));
+      } catch (error) {
+        rejectSynced(error);
+      }
+      return;
+    }
     try {
       const decoder = decoding.createDecoder(new Uint8Array(data));
       const messageType = decoding.readVarUint(decoder);
@@ -90,21 +119,27 @@ function openRoom(roomId, doc = new Y.Doc()) {
         socket.send(encoding.toUint8Array(encoder));
       }
       if (syncType === syncProtocol.messageYjsSyncStep2) {
-        clearTimeout(timeout);
-        syncedResolve();
+        resolveSynced();
       }
     } catch (error) {
-      syncedReject(error);
+      rejectSynced(error);
     }
   });
-  socket.on('error', (error) => syncedReject(error));
+  socket.on('error', rejectSynced);
+  socket.on('close', (code, reason) => {
+    rejectSynced(
+      new Error(`WebSocket closed before sync (${code}: ${reason.toString() || 'no reason'}).`),
+    );
+  });
   return {
     doc,
     socket,
     synced,
     close() {
       doc.off('update', sendUpdate);
-      if (socket.readyState === WebSocket.OPEN) socket.close();
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
     },
   };
 }

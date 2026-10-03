@@ -24,14 +24,32 @@ export function pageInfo(limit: number, offset: number, totalCount: number) {
   return { limit, offset, totalCount, hasNextPage: offset + limit < totalCount };
 }
 
+function isSerializableConflict(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) return error.code === 'P2034';
+  if (!error || typeof error !== 'object') return false;
+
+  const adapterError = error as { name?: unknown; cause?: unknown };
+  const cause = adapterError.cause;
+  return (
+    adapterError.name === 'DriverAdapterError' &&
+    typeof cause === 'object' &&
+    cause !== null &&
+    'kind' in cause &&
+    cause.kind === 'TransactionWriteConflict'
+  );
+}
+
 export function databaseError(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === 'P2002' || error.code === 'P2034') {
+    if (error.code === 'P2002') {
       throw new ApiError('The operation conflicts with existing data.', 'CONFLICT');
     }
     if (error.code === 'P2025') {
       throw new ApiError('The requested resource was not found.', 'NOT_FOUND');
     }
+  }
+  if (isSerializableConflict(error)) {
+    throw new ApiError('The operation conflicts with existing data.', 'CONFLICT');
   }
   throw error;
 }
@@ -48,11 +66,9 @@ export async function serializableTransaction<T>(
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2034' &&
-        attempt < 2
-      ) {
+      // Prisma's PostgreSQL driver adapter reports SQLSTATE 40001/40P01 as
+      // DriverAdapterError(TransactionWriteConflict), instead of P2034.
+      if (isSerializableConflict(error) && attempt < 2) {
         continue;
       }
       databaseError(error);
