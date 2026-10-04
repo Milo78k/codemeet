@@ -22,6 +22,12 @@ enum ProgrammingLanguage {
   REACT_TSX
 }
 
+enum CodeRunStatus {
+  SUCCESS
+  RUNTIME_ERROR
+  TIMEOUT
+}
+
 type User {
   id: ID!
   name: String!
@@ -77,6 +83,20 @@ type Interview {
   updatedAt: String!
 }
 
+type CodeRun {
+  id: ID!
+  interviewId: ID!
+  interviewQuestionId: ID!
+  language: ProgrammingLanguage!
+  sourceSnapshot: String!
+  status: CodeRunStatus!
+  stdout: String
+  stderr: String
+  durationMs: Int
+  createdByParticipant: InterviewParticipant
+  createdAt: String!
+}
+
 enum GuestInviteState {
   VALID
   EXPIRED
@@ -121,6 +141,11 @@ type InterviewPage {
   pageInfo: PageInfo!
 }
 
+type CodeRunPage {
+  items: [CodeRun!]!
+  pageInfo: PageInfo!
+}
+
 input CreateQuestionInput {
   title: String!
   description: String!
@@ -141,6 +166,17 @@ input CreateInterviewInput {
   title: String!
 }
 
+input RecordCodeRunInput {
+  runId: ID!
+  interviewQuestionId: ID!
+  language: ProgrammingLanguage!
+  sourceSnapshot: String!
+  status: CodeRunStatus!
+  stdout: String!
+  stderr: String!
+  durationMs: Int!
+}
+
 type Query {
   health: String!
   guestInvite(inviteToken: String!): GuestInvitePreview!
@@ -155,6 +191,12 @@ type Query {
   question(id: ID!): Question
   interviews(status: InterviewStatus, limit: Int = 20, offset: Int = 0): InterviewPage!
   interview(id: ID!): Interview
+  codeRuns(
+    interviewId: ID!
+    interviewQuestionId: ID!
+    limit: Int = 20
+    offset: Int = 0
+  ): CodeRunPage!
 }
 
 type Mutation {
@@ -167,4 +209,5 @@ type Mutation {
   setActiveQuestion(interviewId: ID!, questionId: ID!): Interview!
   startInterview(interviewId: ID!): Interview!
   finishInterview(interviewId: ID!): Interview!
+  recordCodeRun(interviewId: ID!, input: RecordCodeRunInput!): CodeRun!
 }

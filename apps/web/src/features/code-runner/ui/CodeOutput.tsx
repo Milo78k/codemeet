@@ -6,9 +6,11 @@ import styles from '../../interviews/editor/editor.module.css';
 export function CodeOutput({
   language,
   state,
+  historySaveStatus = null,
 }: {
   language: Parameters<typeof isCodeRunnerLanguageSupported>[0];
   state: CodeRunnerViewState;
+  historySaveStatus?: 'saving' | 'saved' | 'failed' | null;
 }) {
   if (!isCodeRunnerLanguageSupported(language)) {
     return (
@@ -41,10 +43,16 @@ export function CodeOutput({
     );
   }
 
-  return <ExecutionOutput result={state.result} />;
+  return <ExecutionOutput result={state.result} historySaveStatus={historySaveStatus} />;
 }
 
-function ExecutionOutput({ result }: { result: CodeExecutionResult }) {
+function ExecutionOutput({
+  result,
+  historySaveStatus,
+}: {
+  result: CodeExecutionResult;
+  historySaveStatus: 'saving' | 'saved' | 'failed' | null;
+}) {
   const statusText = {
     success: `Completed · ${result.durationMs} ms`,
     runtime_error: `Runtime error · ${result.durationMs} ms`,
@@ -87,6 +95,17 @@ function ExecutionOutput({ result }: { result: CodeExecutionResult }) {
       ) : (
         <p className={styles.outputNotice}>
           {result.status === 'success' ? 'No console output.' : result.stderr.join('\n')}
+        </p>
+      )}
+      {historySaveStatus && (
+        <p
+          role={historySaveStatus === 'failed' ? 'alert' : 'status'}
+          className={historySaveStatus === 'failed' ? styles.outputFailure : styles.outputNotice}
+        >
+          {historySaveStatus === 'saving' && 'Saving this run to history…'}
+          {historySaveStatus === 'saved' && 'Saved to run history.'}
+          {historySaveStatus === 'failed' &&
+            'Run history could not be saved. The execution output is still available.'}
         </p>
       )}
     </section>

@@ -15,10 +15,12 @@ export function useCodeRunner({
   interviewQuestionId,
   language,
   enabled,
+  onComplete,
 }: {
   interviewQuestionId: string;
   language: ProgrammingLanguage;
   enabled: boolean;
+  onComplete?: (result: CodeExecutionResult, sourceSnapshot: string) => void;
 }) {
   const runner = useMemo(() => new CodeRunner(), []);
   const [viewState, setViewState] = useState<CodeRunnerViewState>({ status: 'idle' });
@@ -47,8 +49,9 @@ export function useCodeRunner({
 
   const run = useCallback(
     (source: string) => {
-      if (!enabled) return;
-      const handle = runner.start({ interviewQuestionId, language, source: String(source) });
+      if (!enabled) return null;
+      const sourceSnapshot = String(source);
+      const handle = runner.start({ interviewQuestionId, language, source: sourceSnapshot });
       activeHandle.current = handle;
       setViewState({ status: 'running', runId: handle.runId });
       void handle.promise.then((result) => {
@@ -59,9 +62,11 @@ export function useCodeRunner({
           return;
         }
         setViewState({ status: 'complete', result });
+        onComplete?.(result, sourceSnapshot);
       });
+      return handle.runId;
     },
-    [enabled, interviewQuestionId, language, runner],
+    [enabled, interviewQuestionId, language, onComplete, runner],
   );
 
   let visibleState = viewState;

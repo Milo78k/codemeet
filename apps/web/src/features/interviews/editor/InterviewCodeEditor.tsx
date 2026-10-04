@@ -1,11 +1,20 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
-import type { ProgrammingLanguage } from '../../../shared/api/generated/graphql';
+import {
+  GetCodeRunsDocument,
+  RecordCodeRunDocument,
+  type CodeRunStatus,
+  type ProgrammingLanguage,
+} from '../../../shared/api/generated/graphql';
 import { languageLabels } from '../../../shared/lib/format';
+import type { CodeExecutionResult } from '../../code-runner/model/execution';
 import { CodeOutput } from '../../code-runner/ui/CodeOutput';
+import { CodeRunHistory } from '../../code-runner/ui/CodeRunHistory';
+import { serializePersistedOutput } from '../../code-runner/lib/persisted-output';
 import { isCodeRunnerLanguageSupported } from '../../code-runner/model/execution';
 import { useCodeRunner } from '../../code-runner/useCodeRunner';
 import type { InterviewDraftStore } from './draft-store';
@@ -85,14 +94,78 @@ function QuestionCodeEditor({
   const [retryVersion, setRetryVersion] = useState(0);
   const [MonacoAdapter, setBrowserAdapter] = useState(() => InitialMonacoAdapter);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historySaveStatus, setHistorySaveStatus] = useState<'saving' | 'saved' | 'failed' | null>(
+    null,
+  );
+  const currentRunId = useRef<string | null>(null);
   const model = useRef<EditorReadyContext['model'] | null>(null);
   const editor = useRef<EditorReadyContext['editor'] | null>(null);
   const cleanupExternal = useRef<(() => void) | void>(undefined);
   const resetButton = useRef<HTMLButtonElement>(null);
+  const {
+    data: historyData,
+    loading: historyLoading,
+    error: historyError,
+    refetch: refetchHistory,
+  } = useQuery(GetCodeRunsDocument, {
+    variables: { interviewId, interviewQuestionId, limit: 20, offset: historyOffset },
+    skip: !canRun,
+    fetchPolicy: 'cache-and-network',
+    ssr: false,
+  });
+  const [saveCodeRun] = useMutation(RecordCodeRunDocument);
+
+  const saveCompletedRun = useCallback(
+    (result: CodeExecutionResult, sourceSnapshot: string) => {
+      let status: CodeRunStatus;
+      switch (result.status) {
+        case 'success':
+          status = 'SUCCESS';
+          break;
+        case 'runtime_error':
+          status = 'RUNTIME_ERROR';
+          break;
+        case 'timeout':
+          status = 'TIMEOUT';
+          break;
+        default:
+          return;
+      }
+
+      setHistorySaveStatus('saving');
+      const output = serializePersistedOutput(result.stdout, result.stderr);
+      void saveCodeRun({
+        variables: {
+          interviewId,
+          input: {
+            runId: result.runId,
+            interviewQuestionId,
+            language,
+            sourceSnapshot,
+            status,
+            stdout: output.stdout,
+            stderr: output.stderr,
+            durationMs: result.durationMs,
+          },
+        },
+      })
+        .then(() => {
+          if (currentRunId.current === result.runId) setHistorySaveStatus('saved');
+          if (historyOffset !== 0) setHistoryOffset(0);
+          else void refetchHistory().catch(() => {});
+        })
+        .catch(() => {
+          if (currentRunId.current === result.runId) setHistorySaveStatus('failed');
+        });
+    },
+    [historyOffset, interviewId, interviewQuestionId, language, refetchHistory, saveCodeRun],
+  );
   const codeRunner = useCodeRunner({
     interviewQuestionId,
     language,
     enabled: canRun && ready,
+    onComplete: saveCompletedRun,
   });
 
   const editorReady = useCallback(
@@ -163,7 +236,8 @@ function QuestionCodeEditor({
     // Monaco is bound to this question's Y.Text. Capture now; later remote or local edits
     // cannot mutate the primitive string already sent to the execution worker.
     const immutableSourceSnapshot = String(model.current.getValue());
-    codeRunner.run(immutableSourceSnapshot);
+    currentRunId.current = codeRunner.run(immutableSourceSnapshot);
+    setHistorySaveStatus(null);
   }
   const editorFailed = failed || Boolean(collaboration.error);
   const failure = (
@@ -242,7 +316,25 @@ function QuestionCodeEditor({
           </EditorErrorBoundary>
         )}
       </div>
-      <CodeOutput language={language} state={codeRunner.state} />
+      <CodeOutput
+        language={language}
+        state={codeRunner.state}
+        historySaveStatus={historySaveStatus}
+      />
+      <CodeRunHistory
+        page={historyData?.codeRuns}
+        loading={historyLoading}
+        failed={Boolean(historyError)}
+        onRetry={() => {
+          void refetchHistory().catch(() => {});
+        }}
+        onPrevious={() => setHistoryOffset((offset) => Math.max(0, offset - 20))}
+        onNext={() => {
+          if (historyData?.codeRuns.pageInfo.hasNextPage) {
+            setHistoryOffset((offset) => offset + 20);
+          }
+        }}
+      />
       <p className={styles.localNotice}>
         Edits sync live to other people in this interview session. They stay in this session only.
       </p>

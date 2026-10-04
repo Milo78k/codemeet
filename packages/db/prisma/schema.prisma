@@ -35,8 +35,8 @@ enum ProgrammingLanguage {
 
 enum CodeRunStatus {
   SUCCESS
-  FAILED
-  ERROR
+  RUNTIME_ERROR
+  TIMEOUT
 }
 
 enum InterviewEventType {
@@ -195,6 +195,7 @@ model CodeRun {
   createdByParticipant InterviewParticipant? @relation(fields: [interviewId, createdByParticipantId], references: [interviewId, id], onDelete: Restrict, onUpdate: Cascade, map: "CodeRun_participant_membership_fkey")
 
   @@index([interviewId, createdAt])
+  @@index([interviewId, questionId, createdAt, id])
 }
 
 model InterviewNote {

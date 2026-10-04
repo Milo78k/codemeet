@@ -1,0 +1,48 @@
+query GetCodeRuns(
+  $interviewId: ID!
+  $interviewQuestionId: ID!
+  $limit: Int = 20
+  $offset: Int = 0
+) {
+  codeRuns(
+    interviewId: $interviewId
+    interviewQuestionId: $interviewQuestionId
+    limit: $limit
+    offset: $offset
+  ) {
+    items {
+      id
+      interviewId
+      interviewQuestionId
+      language
+      sourceSnapshot
+      status
+      stdout
+      stderr
+      durationMs
+      createdAt
+      createdByParticipant {
+        id
+        displayName
+        role
+      }
+    }
+    pageInfo {
+      limit
+      offset
+      totalCount
+      hasNextPage
+    }
+  }
+}
+
+mutation RecordCodeRun($interviewId: ID!, $input: RecordCodeRunInput!) {
+  recordCodeRun(interviewId: $interviewId, input: $input) {
+    id
+    interviewId
+    interviewQuestionId
+    language
+    status
+    createdAt
+  }
+}

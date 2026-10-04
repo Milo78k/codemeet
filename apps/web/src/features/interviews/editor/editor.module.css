@@ -270,6 +270,10 @@
   .localNotice {
     padding: 11px 16px;
   }
+  .historyPanel {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
   .resetDialog {
     padding: 24px;
   }
@@ -353,4 +357,123 @@
 }
 .outputEntry {
   color: #26352b;
+}
+
+.historyPanel {
+  margin: 0 22px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.historyHeader,
+.historySummary,
+.historyPagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.historyHeader,
+.historyPagination {
+  justify-content: space-between;
+}
+.historyTitle {
+  margin: 0;
+  color: #354333;
+  font-size: 12px;
+  font-weight: 700;
+}
+.historyCount,
+.historyDuration,
+.historyAuthor {
+  color: #66715f;
+  font-size: 11px;
+}
+.historyList {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+}
+.historyItem {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.historySummary {
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.historyTime {
+  color: #354333;
+  font-variant-numeric: tabular-nums;
+}
+.historySuccess,
+.historyFailure,
+.historyTimeout {
+  font-size: 11px;
+  font-weight: 650;
+}
+.historySuccess {
+  color: #236e53;
+}
+.historyFailure,
+.historyTimeout {
+  color: #a3362a;
+}
+.historyDetails {
+  margin-top: 8px;
+  color: #354333;
+  font-size: 11px;
+}
+.historyDetails summary {
+  cursor: pointer;
+}
+.historyDetailBody {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+.historyDetailBody h4 {
+  margin: 5px 0 0;
+  font-size: 11px;
+}
+.historyDetailBody pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px;
+  background: #f7f8f5;
+  color: #26352b;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+.historyMessage {
+  margin: 10px 0 0;
+  color: #66715f;
+  font-size: 12px;
+}
+.historyMessage p {
+  margin: 0 0 8px;
+}
+.historyRetry {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: #fff;
+  color: #354333;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.historyRetry:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.historyPagination > div {
+  display: flex;
+  gap: 6px;
 }
