@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 
@@ -21,15 +21,18 @@ const secondCode = 'const starterB = 2;';
 const firstDraft = 'const draftA = 10;';
 const secondDraft = 'const draftB = 20;';
 
-function editorInterview(status: 'IN_PROGRESS' | 'FINISHED' = 'IN_PROGRESS') {
+function editorInterview(
+  status: 'IN_PROGRESS' | 'FINISHED' = 'IN_PROGRESS',
+  starterCode = firstCode,
+) {
   return interview(interviewId, 'Editable interview', status, [
-    question('question-a', 'Question A', { starterCode: firstCode }),
+    question('question-a', 'Question A', { starterCode }),
     question('question-b', 'Question B', { starterCode: secondCode, language: 'TYPESCRIPT' }),
   ]);
 }
 
-function sessionApi() {
-  let current = editorInterview();
+function sessionApi(starterCode = firstCode) {
+  let current = editorInterview('IN_PROGRESS', starterCode);
   const switches: SetActiveQuestionMutationVariables[] = [];
   server.use(
     api.query('GetInterview', () => HttpResponse.json({ data: { interview: current } })),
@@ -87,6 +90,18 @@ describe('editable interview session', () => {
     expect(screen.queryByText('Unmodified')).not.toBeInTheDocument();
     expect(switches).toEqual([]);
     expect(screen.getByRole('textbox', { name: 'Code editor' })).toHaveValue(firstDraft);
+  });
+
+  test('explains that declared functions need an explicit call and hides the hint after invocation', async () => {
+    sessionApi('export function twoSum() { console.log("ready"); }');
+    await renderEditorSession();
+    expect(screen.getByText(/Functions are not invoked automatically/)).toBeInTheDocument();
+
+    const codeEditor = screen.getByRole('textbox', { name: 'Code editor' });
+    fireEvent.change(codeEditor, {
+      target: { value: 'export function twoSum() { console.log("ready"); }\ntwoSum();' },
+    });
+    expect(screen.queryByText(/Functions are not invoked automatically/)).not.toBeInTheDocument();
   });
 
   test('switching A to B and back preserves the local draft of A', async () => {

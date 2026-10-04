@@ -38,6 +38,8 @@ export type MonacoAdapterProps = {
   onChange: (value: string) => void;
   onEditorReady: EditorReadyCallback;
   onLoadError: (error: unknown) => void;
+  ariaLabel?: string;
+  readOnly?: boolean;
 };
 
 export function MonacoAdapter({
@@ -48,6 +50,8 @@ export function MonacoAdapter({
   onChange,
   onEditorReady,
   onLoadError,
+  ariaLabel = 'Code editor',
+  readOnly = false,
 }: MonacoAdapterProps) {
   const [monaco, setMonaco] = useState<typeof Monaco | null>(null);
   const cleanupBinding = useRef<(() => void) | null>(null);
@@ -116,7 +120,15 @@ export function MonacoAdapter({
           Loading code editor…
         </div>
       }
-      options={editorOptions}
+      options={{
+        ...editorOptions,
+        ariaLabel,
+        readOnly,
+        autoClosingBrackets: 'always',
+        autoClosingQuotes: 'always',
+        autoIndent: 'full',
+        insertSpaces: true,
+      }}
     />
   );
 }

@@ -11,6 +11,7 @@ import type {
   SetActiveQuestionMutation,
   SetActiveQuestionMutationVariables,
 } from '@/shared/api/generated/graphql';
+import { formatDateTime } from '@/shared/lib/format';
 
 import { apiError, deferred, interview, question, type InterviewResult } from './support/fixtures';
 import { router } from './support/navigation';
@@ -76,6 +77,7 @@ describe('interview session', () => {
     await renderSession();
     expect(screen.getByRole('heading', { name: 'Frontend session' })).toBeInTheDocument();
     expect(screen.getByText('IN_PROGRESS')).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime('2026-10-01T09:00:00.000Z'))).toBeInTheDocument();
     expect(
       screen.getByText('Find two numbers using the frozen interview requirements.'),
     ).toBeInTheDocument();
@@ -88,6 +90,20 @@ describe('interview session', () => {
     expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveAccessibleName(new RegExp(firstTitle));
     expect(buttons[1]).toHaveAccessibleName(new RegExp(secondTitle));
+  });
+
+  test('shows a single attached question as read-only instead of a one-option selector', async () => {
+    const current = sessionInterview();
+    server.use(currentInterviewHandler({ ...current, questions: current.questions.slice(0, 1) }));
+    renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    await screen.findByRole('heading', { name: firstTitle });
+
+    const navigation = questionNavigation();
+    expect(
+      within(navigation).queryByRole('combobox', { name: 'Active question' }),
+    ).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(navigation).getByText('Current question')).toBeInTheDocument();
   });
 
   test('candidate session keeps task access but hides Finish and question switching controls', async () => {
@@ -389,10 +405,40 @@ describe('interview session', () => {
     await renderSession();
     const select = screen.getByRole('combobox', { name: 'Active question' });
     expect(select).toHaveValue('question-1');
+    expect(within(select).getAllByRole('option')).toHaveLength(2);
+    select.focus();
+    expect(select).toHaveFocus();
     await user.selectOptions(select, 'question-2');
     expect(await screen.findByRole('heading', { name: secondTitle })).toBeInTheDocument();
     expect(select).toHaveValue('question-2');
     expect(receivedQuestionId).toBe('question-2');
+  });
+
+  test('keeps long question titles contained and available as option text', async () => {
+    const longTitle = `A long interview question title ${'about algorithm design '.repeat(5)}`;
+    const current = sessionInterview();
+    const second = current.questions[1]!;
+    const withLongTitle = {
+      ...current,
+      questions: [
+        current.questions[0]!,
+        {
+          ...second,
+          snapshotTitle: longTitle,
+          question: { ...second.question, title: longTitle },
+        },
+      ],
+    };
+    await renderSession(withLongTitle);
+    const navigation = questionNavigation();
+    const select = within(navigation).getByRole('combobox', { name: 'Active question' });
+    expect(
+      within(select).getByRole('option', { name: /^2\. A long interview question title/ }),
+    ).toBeInTheDocument();
+    expect(within(navigation).getByRole('button', { name: new RegExp(longTitle) })).toHaveAttribute(
+      'title',
+      longTitle,
+    );
   });
 
   test('shows loading while the authoritative interview response is pending', async () => {

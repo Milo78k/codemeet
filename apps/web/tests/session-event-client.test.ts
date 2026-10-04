@@ -86,6 +86,15 @@ describe('session-event WebSocket client', () => {
     expect(
       parseSessionEventServerMessage({
         type: 'session-event',
+        event: { type: 'INTERVIEW_STARTED', interviewId: 'interview-a', occurredAt },
+      }),
+    ).toEqual({
+      type: 'session-event',
+      event: { type: 'INTERVIEW_STARTED', interviewId: 'interview-a', occurredAt },
+    });
+    expect(
+      parseSessionEventServerMessage({
+        type: 'session-event',
         event: { type: 'INTERVIEW_FINISHED', interviewId: '', occurredAt },
       }),
     ).toBeNull();

@@ -3,12 +3,15 @@
 import { loader } from '@monaco-editor/react';
 import type * as MonacoNamespace from 'monaco-editor';
 
+import { reactTsxTypeDeclarations } from './react-tsx-types';
+
 type Monaco = typeof MonacoNamespace;
 type RuntimeErrorListener = (error: Error) => void;
 
 const errorListeners = new Set<RuntimeErrorListener>();
 let loadingMonaco: Promise<Monaco> | undefined;
 let workerRecoveryNeeded = false;
+let reactTsxTypesRegistered = false;
 
 /** A workspace subscribes while mounted; worker failures stay inside its editor UI. */
 export function subscribeMonacoErrors(listener: RuntimeErrorListener): () => void {
@@ -47,7 +50,7 @@ function createLocalWorker(label: string): Worker {
   }
 }
 
-function configureCompilerDefaults(monaco: Monaco): void {
+export function configureCompilerDefaults(monaco: Monaco): void {
   // The stable .tsx model URI enables TSX parsing. React's full type universe
   // is intentionally absent; semantic diagnostics remain enabled.
   const options: MonacoNamespace.typescript.CompilerOptions = {
@@ -60,6 +63,13 @@ function configureCompilerDefaults(monaco: Monaco): void {
   };
   monaco.typescript.typescriptDefaults.setCompilerOptions(options);
   monaco.typescript.javascriptDefaults.setCompilerOptions(options);
+  if (!reactTsxTypesRegistered) {
+    monaco.typescript.typescriptDefaults.addExtraLib(
+      reactTsxTypeDeclarations,
+      'file:///codemeet/react-tsx-types.d.ts',
+    );
+    reactTsxTypesRegistered = true;
+  }
 }
 
 /** Configures the local ESM instance before the React wrapper can initialize. */

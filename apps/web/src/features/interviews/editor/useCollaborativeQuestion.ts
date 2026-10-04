@@ -24,6 +24,8 @@ type CollaborativeQuestionOptions = {
   onChange: (value: string) => void;
 };
 
+const OFFLINE_AFTER_RECONNECT_MS = 20_000;
+
 export function useCollaborativeQuestion({
   interviewId,
   interviewQuestionId,
@@ -78,11 +80,35 @@ export function useCollaborativeQuestion({
             collectPresenceParticipants(identity, remoteStates, collaboration.provider.wsconnected),
           );
         };
+        let offlineTimer: number | undefined;
+        let reconnectTimedOut = false;
+        const clearOfflineTimer = () => {
+          if (offlineTimer === undefined) return;
+          window.clearTimeout(offlineTimer);
+          offlineTimer = undefined;
+        };
         const updateStatus = ({ status: nextStatus }: { status: string }) => {
-          setStatus(nextStatus === 'connected' ? 'connected' : 'reconnecting');
+          if (nextStatus === 'connected') {
+            reconnectTimedOut = false;
+            clearOfflineTimer();
+            setStatus('connected');
+          } else {
+            if (!reconnectTimedOut) setStatus('reconnecting');
+            if (!reconnectTimedOut && offlineTimer === undefined) {
+              offlineTimer = window.setTimeout(() => {
+                offlineTimer = undefined;
+                if (active) {
+                  reconnectTimedOut = true;
+                  setStatus('disconnected');
+                }
+              }, OFFLINE_AFTER_RECONNECT_MS);
+            }
+          }
           updateParticipants();
         };
         const markDisconnected = () => {
+          reconnectTimedOut = true;
+          clearOfflineTimer();
           setStatus('disconnected');
           setParticipants([]);
         };
@@ -99,6 +125,7 @@ export function useCollaborativeQuestion({
           collaboration.provider.off('closed', markDisconnected);
           collaboration.provider.awareness.off('change', updateParticipants);
           collaboration.text.unobserve(onTextChange);
+          clearOfflineTimer();
           cleanupBinding?.();
           setParticipants([]);
         };

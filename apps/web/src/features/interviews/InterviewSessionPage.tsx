@@ -39,7 +39,7 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
   const interview = data?.interview;
   useInterviewSessionEvents({
     interviewId,
-    enabled: interview?.status === 'IN_PROGRESS',
+    enabled: Boolean(interview && interview.status !== 'FINISHED'),
     refetch: () => refetch(),
   });
   const currentParticipant = useQuery(GetCurrentParticipantDocument, {

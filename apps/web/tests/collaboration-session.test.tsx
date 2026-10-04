@@ -1,4 +1,4 @@
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
@@ -25,7 +25,7 @@ const interviewId = 'collaboration-session';
 const firstCode = 'const starterA = 1;';
 const secondCode = 'const starterB = 2;';
 
-function session(status: 'IN_PROGRESS' | 'FINISHED' = 'IN_PROGRESS') {
+function session(status: 'READY' | 'IN_PROGRESS' | 'FINISHED' = 'IN_PROGRESS') {
   return interview(interviewId, 'Collaborative interview', status, [
     question('question-a', 'Question A', { starterCode: firstCode }),
     question('question-b', 'Question B', { starterCode: secondCode, language: 'TYPESCRIPT' }),
@@ -53,22 +53,54 @@ function mockSession(current = session()) {
   };
 }
 
-function sessionEventMessage(type: 'ACTIVE_QUESTION_CHANGED' | 'INTERVIEW_FINISHED') {
+function sessionEventMessage(
+  type: 'ACTIVE_QUESTION_CHANGED' | 'INTERVIEW_STARTED' | 'INTERVIEW_FINISHED',
+  eventInterviewId = interviewId,
+) {
   return JSON.stringify({
     type: 'session-event',
-    event: { type, interviewId, occurredAt: '2026-10-03T12:00:00.000Z' },
+    event: { type, interviewId: eventInterviewId, occurredAt: '2026-10-03T12:00:00.000Z' },
   });
 }
 
 async function waitForSessionEventSocket() {
   let socket: FakeSessionEventWebSocket | undefined;
   await waitFor(() => {
-    socket = FakeSessionEventWebSocket.instances.find((entry) =>
-      entry.url.includes(`/session-events/${interviewId}`),
-    );
+    socket = [...FakeSessionEventWebSocket.instances]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.readyState !== FakeSessionEventWebSocket.CLOSED &&
+          entry.url.includes(`/session-events/${interviewId}`),
+      );
     expect(socket).toBeDefined();
   });
   return socket!;
+}
+
+function mockCandidateSession(token = 'p'.repeat(43)) {
+  storeParticipantSession({
+    role: 'candidate',
+    token,
+    interviewId,
+    expiresAt: '2026-10-10T12:00:00.000Z',
+  });
+  server.use(
+    api.query('GetCurrentParticipant', () =>
+      HttpResponse.json({
+        data: {
+          currentParticipant: {
+            __typename: 'InterviewParticipant',
+            id: 'candidate-anton',
+            interviewId,
+            displayName: 'Anton',
+            role: 'CANDIDATE',
+            joinedAt: '2026-10-02T10:00:00.000Z',
+          },
+        },
+      }),
+    ),
+  );
 }
 
 function authenticateSessionEventSocket(
@@ -83,6 +115,73 @@ function authenticateSessionEventSocket(
 }
 
 describe('collaborative interview editor integration', () => {
+  test('a joined guest waiting before start enters the session from an interview-started event', async () => {
+    const controller = mockSession(session('READY'));
+    mockCandidateSession('w'.repeat(43));
+
+    renderWithApi(
+      <StrictMode>
+        <InterviewSessionPage interviewId={interviewId} />
+      </StrictMode>,
+    );
+    expect(await screen.findByText('Interview has not started yet')).toBeInTheDocument();
+
+    const events = await waitForSessionEventSocket();
+    authenticateSessionEventSocket(events, 'candidate');
+    await waitFor(() => expect(controller.getQueryCount()).toBeGreaterThan(1));
+    expect(
+      FakeSessionEventWebSocket.instances.filter(
+        (socket) => socket.readyState !== FakeSessionEventWebSocket.CLOSED,
+      ),
+    ).toHaveLength(1);
+
+    const queryCount = controller.getQueryCount();
+    act(() => events.receive(sessionEventMessage('INTERVIEW_STARTED', 'another-interview')));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(controller.getQueryCount()).toBe(queryCount);
+    expect(screen.getByText('Interview has not started yet')).toBeInTheDocument();
+
+    controller.setCurrent(session('IN_PROGRESS'));
+    act(() => {
+      events.receive(sessionEventMessage('INTERVIEW_STARTED'));
+      events.receive(sessionEventMessage('INTERVIEW_STARTED'));
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Question A' })).toBeInTheDocument();
+    expect(screen.queryByText('Interview has not started yet')).not.toBeInTheDocument();
+    await screen.findByText('Connected');
+    const roomId = createCollaborationRoomId({
+      interviewId,
+      interviewQuestionId: `${interviewId}-attachment-question-a`,
+    });
+    expect(collaborationTestMetrics(roomId)?.providers).toBe(1);
+  });
+
+  test('a waiting guest recovers canonical IN_PROGRESS state after missing start while offline', async () => {
+    const controller = mockSession(session('READY'));
+    mockCandidateSession('o'.repeat(43));
+    renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    expect(await screen.findByText('Interview has not started yet')).toBeInTheDocument();
+
+    const firstEvents = await waitForSessionEventSocket();
+    authenticateSessionEventSocket(firstEvents, 'candidate');
+    await waitFor(() => expect(controller.getQueryCount()).toBeGreaterThan(1));
+
+    controller.setCurrent(session('IN_PROGRESS'));
+    act(() => firstEvents.disconnect());
+    await waitFor(() => expect(FakeSessionEventWebSocket.instances.length).toBeGreaterThan(1));
+    const reconnected = FakeSessionEventWebSocket.instances.at(-1)!;
+    act(() => {
+      reconnected.open();
+      reconnected.receive(JSON.stringify({ type: 'authenticated' }));
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Question A' })).toBeInTheDocument();
+    expect(screen.queryByText('Interview has not started yet')).not.toBeInTheDocument();
+  });
+
   test('opens the active attachment room and reflects remote edits in code and dirty state', async () => {
     mockSession();
     renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
@@ -188,6 +287,8 @@ describe('collaborative interview editor integration', () => {
     });
     act(() => setProviderStatus(roomId, 'disconnected'));
     expect(screen.getByText('Reconnecting…')).toBeInTheDocument();
+    act(() => setProviderStatus(roomId, 'connected'));
+    expect(screen.getByText('Connected')).toBeInTheDocument();
     mounted.unmount();
     await waitFor(() => {
       expect(collaborationTestMetrics(roomId)?.destroyed).toBeGreaterThan(0);
@@ -200,6 +301,29 @@ describe('collaborative interview editor integration', () => {
     expect(await screen.findByText('Interview is finished')).toBeInTheDocument();
     expect(roomIds).toEqual([]);
     expect(screen.queryByLabelText('Participants')).not.toBeInTheDocument();
+  });
+
+  test('changes a stalled reconnect from Reconnecting to Offline and back to Connected on recovery', async () => {
+    mockSession();
+    const mounted = renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    await screen.findByText('Connected');
+    const roomId = createCollaborationRoomId({
+      interviewId,
+      interviewQuestionId: `${interviewId}-attachment-question-a`,
+    });
+    jest.useFakeTimers();
+    try {
+      act(() => setProviderStatus(roomId, 'disconnected'));
+      expect(screen.getByText('Reconnecting…')).toBeInTheDocument();
+      act(() => jest.advanceTimersByTime(20_000));
+      expect(screen.getByText('Offline')).toBeInTheDocument();
+      act(() => setProviderStatus(roomId, 'connected'));
+      expect(screen.getByText('Connected')).toBeInTheDocument();
+    } finally {
+      mounted.unmount();
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
   });
 
   test('shows a remote interviewer to the candidate and deduplicates tabs by participantId', async () => {

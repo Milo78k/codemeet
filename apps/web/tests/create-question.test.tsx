@@ -19,8 +19,8 @@ async function fillQuestionForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Description'), 'Find the target in a sorted array.');
   await user.selectOptions(screen.getByLabelText('Difficulty'), 'MEDIUM');
   await user.selectOptions(screen.getByLabelText('Language'), 'TYPESCRIPT');
-  await user.clear(screen.getByLabelText('Starter code'));
-  await user.type(screen.getByLabelText('Starter code'), 'const target = 3;');
+  await user.clear(screen.getByRole('textbox', { name: 'Starter code' }));
+  await user.type(screen.getByRole('textbox', { name: 'Starter code' }), 'const target = 3;');
 }
 
 describe('create question', () => {
@@ -91,5 +91,45 @@ describe('create question', () => {
     expect(screen.getByLabelText('Title')).toHaveValue('Binary search');
     expect(screen.getByRole('button', { name: 'Create question' })).toBeEnabled();
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  test('uses compact language-aware Monaco starter editor and preserves edits on language switch', async () => {
+    let submittedInput: CreateQuestionMutationVariables['input'] | undefined;
+    server.use(
+      api.mutation<CreateQuestionMutation, CreateQuestionMutationVariables>(
+        'CreateQuestion',
+        ({ variables }) => {
+          submittedInput = variables.input;
+          return HttpResponse.json({ data: { createQuestion: question('created-question') } });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithApi(<CreateQuestionPage />);
+    await user.type(screen.getByLabelText('Title'), 'Monaco starter');
+    await user.type(screen.getByLabelText('Description'), 'Exercise starter code editing.');
+    const starter = await screen.findByRole('textbox', { name: 'Starter code' });
+
+    await user.type(starter, 'const answer = 42;');
+    expect(starter).toHaveValue('const answer = 42;');
+    expect(starter).toHaveAttribute('data-language', 'javascript');
+
+    await user.selectOptions(screen.getByLabelText('Language'), 'TYPESCRIPT');
+    const javascriptStarter = await screen.findByRole('textbox', { name: 'Starter code' });
+    expect(javascriptStarter).toHaveValue('const answer = 42;');
+    expect(javascriptStarter).toHaveAttribute('data-language', 'typescript');
+    await user.clear(javascriptStarter);
+    await user.type(javascriptStarter, 'const typedAnswer: number = 42;');
+
+    await user.selectOptions(screen.getByLabelText('Language'), 'JAVASCRIPT');
+    const finalStarter = await screen.findByRole('textbox', { name: 'Starter code' });
+    expect(finalStarter).toHaveValue('const typedAnswer: number = 42;');
+    expect(finalStarter).toHaveAttribute('data-language', 'javascript');
+    await user.click(screen.getByRole('button', { name: 'Create question' }));
+    await waitFor(() => expect(router.push).toHaveBeenCalled());
+    expect(submittedInput).toMatchObject({
+      language: 'JAVASCRIPT',
+      starterCode: 'const typedAnswer: number = 42;',
+    });
   });
 });

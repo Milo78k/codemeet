@@ -284,8 +284,8 @@ describe('interview results page', () => {
     await user.click(screen.getAllByRole('button', { name: 'View run history' })[0]!);
     expect(await screen.findByRole('heading', { name: 'Run history' })).toBeInTheDocument();
     expect(historyReads).toBe(1);
-    expect(screen.getByText('View run details')).toBeInTheDocument();
-    await user.click(screen.getByText('View run details'));
+    expect(screen.getByText('View details')).toBeInTheDocument();
+    await user.click(screen.getByText('View details'));
     expect(screen.getByLabelText('Source snapshot')).toHaveTextContent(
       'const answer = 42; console.log(answer);',
     );

@@ -3,6 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import { useEffect, useRef, useState } from 'react';
 
 import type { MonacoAdapterProps } from '@/features/interviews/editor/MonacoAdapter';
+import { getMonacoLanguage } from '@/features/interviews/editor/language';
 
 type AdapterMode = 'ready' | 'loading' | 'error';
 let mode: AdapterMode = 'ready';
@@ -120,6 +121,8 @@ function TestMonacoAdapter({
   onChange,
   onEditorReady,
   onLoadError,
+  ariaLabel = 'Code editor',
+  readOnly = false,
 }: MonacoAdapterProps) {
   const [model, setModel] = useState<Monaco.editor.ITextModel | null>(null);
   const [value, setValue] = useState(initialValue);
@@ -130,7 +133,7 @@ function TestMonacoAdapter({
       return;
     }
     if (mode === 'loading') return;
-    const monacoLanguage = language === 'JAVASCRIPT' ? 'javascript' : 'typescript';
+    const monacoLanguage = getMonacoLanguage(language);
     const current = models.getOrCreateModel(
       editorRuntime.monaco,
       uri,
@@ -170,7 +173,9 @@ function TestMonacoAdapter({
   return (
     <textarea
       ref={input}
-      aria-label="Code editor"
+      aria-label={ariaLabel}
+      data-language={getMonacoLanguage(language)}
+      disabled={readOnly}
       value={value}
       onChange={(event) => model.setValue(event.target.value)}
     />

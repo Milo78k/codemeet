@@ -125,9 +125,9 @@ Manual browser smoke: **PASS**. The user verified:
 - A first cold root typecheck collided with the existing `db:build` and `db:typecheck` scripts both running Prisma generation into the same ignored output directory. The partial generated client was discarded and regenerated with the existing script; after the root build cache was warm, the final `pnpm check` and `pnpm build` passed without changing Turbo configuration.
 - Existing Prisma adapter tests emit a `pg` concurrent-query deprecation warning, and Jest emits the configured Node VM Modules experimental warning; the suites pass.
 
-## 17. Next logical phase
+## 17. State when PHASE 10 closed
 
-The next planned product phase is PHASE 11: private interview notes, timeline and result page. It has not started. Trusted judging, server-side execution, sandboxing, scoring, replay, Yjs persistence, Auth.js, restore-old-run and AI review remain explicitly out of scope.
+When this report was written, PHASE 11 had not started. PHASE 11 is now complete and its Results page provides a descriptive summary and timeline. Trusted judging, server-side execution, hardened sandboxing, scoring, replay, Yjs persistence, production interviewer authentication, restore-old-run and AI review remain out of scope or future work.
 
 ## 18. Technical interviewer questions
 

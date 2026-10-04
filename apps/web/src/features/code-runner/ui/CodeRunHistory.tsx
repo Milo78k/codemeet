@@ -45,8 +45,12 @@ export function CodeRunHistory({
       ) : page?.items.length ? (
         <>
           <ol className={styles.historyList}>
-            {page.items.map((run) => (
-              <HistoryItem key={run.id} run={run} />
+            {page.items.map((run, index) => (
+              <HistoryItem
+                key={run.id}
+                run={run}
+                latest={page.pageInfo.offset === 0 && index === 0}
+              />
             ))}
           </ol>
           {(page.pageInfo.offset > 0 || page.pageInfo.hasNextPage) && (
@@ -87,7 +91,7 @@ export function CodeRunHistory({
   );
 }
 
-function HistoryItem({ run }: { run: CodeRunRow }) {
+function HistoryItem({ run, latest }: { run: CodeRunRow; latest: boolean }) {
   const status = {
     SUCCESS: { label: '✓ Success', className: styles.historySuccess },
     RUNTIME_ERROR: { label: '✕ Runtime error', className: styles.historyFailure },
@@ -96,25 +100,38 @@ function HistoryItem({ run }: { run: CodeRunRow }) {
   const time = formatDateTime(run.createdAt, 'compact');
 
   return (
-    <li className={styles.historyItem}>
-      <div className={styles.historySummary}>
-        <time className={styles.historyTime} dateTime={run.createdAt}>
-          {time}
-        </time>
-        <span className={status.className}>{status.label}</span>
-        <span className={styles.historyDuration}>{formatDuration(run.durationMs)}</span>
-        {run.createdByParticipant && (
-          <span className={styles.historyAuthor}>{run.createdByParticipant.displayName}</span>
-        )}
-      </div>
-      <details className={styles.historyDetails}>
-        <summary>View run details</summary>
-        <div className={styles.historyDetailBody}>
-          <h4>Source snapshot</h4>
-          <pre aria-label="Source snapshot">{run.sourceSnapshot}</pre>
-          <RunOutput stdout={run.stdout ?? ''} stderr={run.stderr ?? ''} />
+    <li className={`${styles.historyItem} ${latest ? styles.historyLatest : ''}`}>
+      <div className={styles.historyRow}>
+        <div className={styles.historySummary}>
+          <time className={styles.historyTime} dateTime={run.createdAt}>
+            {time}
+          </time>
+          <span className={styles.historySeparator} aria-hidden="true">
+            |
+          </span>
+          <span className={status.className}>{status.label}</span>
+          <span className={styles.historySeparator} aria-hidden="true">
+            |
+          </span>
+          <span className={styles.historyDuration}>{formatDuration(run.durationMs)}</span>
+          <span className={styles.historySeparator} aria-hidden="true">
+            |
+          </span>
+          <span className={styles.historyAuthor}>
+            {run.createdByParticipant?.displayName ?? 'Participant unavailable'}
+          </span>
         </div>
-      </details>
+        <details className={styles.historyDetails}>
+          <summary>View details</summary>
+          <div className={styles.historyDetailBody}>
+            <h4>Source snapshot</h4>
+            <pre aria-label="Source snapshot" tabIndex={0}>
+              {run.sourceSnapshot}
+            </pre>
+            <RunOutput stdout={run.stdout ?? ''} stderr={run.stderr ?? ''} />
+          </div>
+        </details>
+      </div>
     </li>
   );
 }

@@ -1,5 +1,6 @@
 import { isCodeRunnerLanguageSupported, type CodeExecutionResult } from '../model/execution';
 import type { CodeRunnerViewState } from '../useCodeRunner';
+import { formatDuration } from '../../../shared/lib/format';
 import { RunOutput } from './RunOutput';
 
 import styles from '../../interviews/editor/editor.module.css';
@@ -55,29 +56,32 @@ function ExecutionOutput({
   historySaveStatus: 'saving' | 'saved' | 'failed' | null;
 }) {
   const statusText = {
-    success: `Completed · ${result.durationMs} ms`,
-    runtime_error: `Runtime error · ${result.durationMs} ms`,
-    timeout: `Execution timed out · ${result.durationMs} ms`,
+    success: 'Completed',
+    runtime_error: 'Runtime error',
+    timeout: 'Execution timed out',
     unsupported: 'Execution unsupported',
     cancelled: 'Execution cancelled',
   }[result.status];
 
   return (
-    <section className={styles.outputPanel} aria-label="Code output">
+    <section className={`${styles.outputPanel} ${styles.outputCompact}`} aria-label="Code output">
       <h3 className={styles.outputTitle}>Run result</h3>
-      <p
-        role={result.status === 'runtime_error' ? 'alert' : 'status'}
-        className={
-          result.status === 'success'
-            ? styles.outputSuccess
-            : result.status === 'timeout' || result.status === 'runtime_error'
-              ? styles.outputFailure
-              : styles.outputStatus
-        }
-      >
-        {result.status === 'success' ? '✓ ' : result.status === 'timeout' ? '⏱ ' : ''}
-        {statusText}
-      </p>
+      <div className={styles.outputSummary}>
+        <p
+          role={result.status === 'runtime_error' ? 'alert' : 'status'}
+          className={
+            result.status === 'success'
+              ? styles.outputSuccess
+              : result.status === 'timeout' || result.status === 'runtime_error'
+                ? styles.outputFailure
+                : styles.outputStatus
+          }
+        >
+          {result.status === 'success' ? '✓ ' : result.status === 'timeout' ? '⏱ ' : ''}
+          {statusText}
+        </p>
+        <span className={styles.outputDuration}>{formatDuration(result.durationMs)}</span>
+      </div>
       <RunOutput stdout={result.stdout.join('\n')} stderr={result.stderr.join('\n')} />
       {historySaveStatus && (
         <p
