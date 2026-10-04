@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode, useCallback } from 'react';
 
@@ -13,6 +13,7 @@ import { createInterviewModelManager } from '@/features/interviews/editor/model-
 import type { EditorReadyContext } from '@/features/interviews/editor/MonacoAdapter';
 
 import { createFakeMonaco, editorRuntime } from './support/monaco';
+import { renderWithApi } from './support/render';
 
 const starterCode = 'const initial = 1;';
 
@@ -125,7 +126,7 @@ describe('interview model ownership', () => {
       );
     }
     const user = userEvent.setup();
-    const view = render(
+    const view = renderWithApi(
       <StrictMode>
         <Workspace />
       </StrictMode>,
@@ -171,7 +172,7 @@ describe('interview model ownership', () => {
       );
     }
     const user = userEvent.setup();
-    const view = render(<Workspace id="previous-workspace" />);
+    const view = renderWithApi(<Workspace id="previous-workspace" />);
     const editor = await screen.findByRole('textbox', { name: 'Code editor' });
     await user.clear(editor);
     await user.type(editor, 'const previousDraft = true;');

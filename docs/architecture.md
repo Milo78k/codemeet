@@ -2,7 +2,7 @@
 
 ## Статус документа
 
-**PHASE 9 complete:** Interview Session runs JavaScript and standalone TypeScript snippets in a CSP-restricted browser Worker; manual browser smoke passed, including real Worker termination for an infinite loop. GraphQL/PostgreSQL остаются business state, Y.Doc/Y.Text — общим исходным кодом, Awareness — только эфемерным presence/cursor/selection, Session Events — уведомлениями о бизнес-переходах. Code Runner is local to the initiating browser and does not send user source to the API, persist or broadcast its result. React TSX execution, durable Yjs persistence and interviewer authentication are not implemented. Результаты и ограничения: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md).
+**PHASE 10 implementation complete; manual browser smoke pending.** The browser Worker still executes JavaScript and standalone TypeScript locally. After execution, the client reports the result through `recordCodeRun`; PostgreSQL stores a bounded immutable source snapshot and output, and the current `InterviewQuestion` has a read-only run history. A `CodeRun` result is client-reported, not a trusted judge verdict; the API never executes source. React TSX execution, durable Yjs persistence and interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md).
 
 ## Реализованный pipeline PHASE 2–7
 
@@ -25,7 +25,7 @@ flowchart LR
 
 SDL находится в `apps/api/src/graphql/schema.graphql`. Resolvers вызывают `question.service.ts` и `interview.service.ts`. Zod на границе сервисов проверяет строки, enum values, IDs, pagination и order; максимальный `limit` — 100. Сервисы отвечают за ownership, business validation и transactions. Prisma выполняет database access без дополнительного repository layer.
 
-Доступны queries `health`, `questions`, `question`, `interviews`, `interview` и mutations `createQuestion`, `updateQuestion`, `createInterview`, `addQuestionToInterview`, `setActiveQuestion`, `startInterview`, `finishInterview`. Tokens, notes и runs пока имеют только persistence models; соответствующих API операций ещё нет.
+Доступны queries `health`, `questions`, `question`, `interviews`, `interview`, `codeRuns` и mutations `createQuestion`, `updateQuestion`, `createInterview`, `addQuestionToInterview`, `setActiveQuestion`, `startInterview`, `finishInterview`, `recordCodeRun`. Tokens и notes имеют отдельные service/API contracts только при соответствующих фазах; CodeRun запись ограничена завершёнными результатами браузерного Worker.
 
 ## Frontend PHASE 2–7
 
@@ -97,7 +97,7 @@ flowchart LR
   Server <--> Room["In-memory Y.Doc"]
 ```
 
-`onEditorReady({ editor, monaco, model })` подключает y-monaco binding к текущей stable model; cleanup вызывается при смене question/editor и unmount. Frontend provider отключает BroadcastChannel, поэтому клиенты обмениваются состоянием через API WebSocket. PHASE 5 добавила Yjs документ; PHASE 6 добавила origin/session/membership авторизацию; PHASE 7 подключила Awareness, описанный ниже. Используются y-websocket client и стандартные y-protocols/lib0 wire protocols; собственный CRDT не создавался. Durable save mutations и CodeRunner ещё не реализованы.
+`onEditorReady({ editor, monaco, model })` подключает y-monaco binding к текущей stable model; cleanup вызывается при смене question/editor и unmount. Frontend provider отключает BroadcastChannel, поэтому клиенты обмениваются состоянием через API WebSocket. PHASE 5 добавила Yjs документ; PHASE 6 добавила origin/session/membership авторизацию; PHASE 7 подключила Awareness, описанный ниже. Используются y-websocket client и стандартные y-protocols/lib0 wire protocols; собственный CRDT не создавался. PHASE 9 добавила browser CodeRunner, а PHASE 10 — CodeRun persistence. Durable Y.Doc save mutations ещё не реализованы.
 
 ### Ephemeral Awareness и participant presence — PHASE 7
 
@@ -184,31 +184,31 @@ PHASE 2 добавила только CORS transport configuration. PHASE 3 ра
 
 ### Domain model и database invariants
 
-| Модель                 | Назначение и важные связи                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| `User`                 | Имя и unique email; автор вопросов и интервью, registered participant, автор заметок  |
-| `Interview`            | Status, timestamps, creator и active question из прикреплённых задач                  |
-| `InterviewParticipant` | Роль в интервью; interviewer имеет User, candidate присоединяется как guest           |
-| `Question`             | Reusable задача: условие, difficulty, language, starter code, creator                 |
-| `InterviewQuestion`    | Membership/order и frozen snapshot после Start; duplicate question/order запрещены    |
-| `GuestToken`           | Unique token hash, expiration и used timestamp; raw token не хранится                 |
-| `ParticipantSession`   | Candidate bearer hash, expiration и revocation timestamp                              |
-| `CodeRun`              | Snapshot и результат; задача и optional actor принадлежат тому же интервью            |
-| `InterviewNote`        | Текст, интервью и User author; permission автора-interviewer добавится с note service |
-| `InterviewEvent`       | Event enum и JSONB payload, структура которого зависит от типа события                |
+| Модель                 | Назначение и важные связи                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `User`                 | Имя и unique email; автор вопросов и интервью, registered participant, автор заметок   |
+| `Interview`            | Status, timestamps, creator и active question из прикреплённых задач                   |
+| `InterviewParticipant` | Роль в интервью; interviewer имеет User, candidate присоединяется как guest            |
+| `Question`             | Reusable задача: условие, difficulty, language, starter code, creator                  |
+| `InterviewQuestion`    | Membership/order и frozen snapshot после Start; duplicate question/order запрещены     |
+| `GuestToken`           | Unique token hash, expiration и used timestamp; raw token не хранится                  |
+| `ParticipantSession`   | Candidate bearer hash, expiration и revocation timestamp                               |
+| `CodeRun`              | Неизменяемый источник и client-reported результат; задача и actor принадлежат интервью |
+| `InterviewNote`        | Текст, интервью и User author; permission автора-interviewer добавится с note service  |
+| `InterviewEvent`       | Event enum и JSONB payload, структура которого зависит от типа события                 |
 
 Composite foreign keys объявлены в Prisma schema и автоматически попали в migration. `(Interview.id, activeQuestionId)` ссылается на `(InterviewQuestion.interviewId, questionId)`; такая же membership связь задана для задачи `CodeRun`. `(CodeRun.interviewId, createdByParticipantId)` ссылается на `(InterviewParticipant.interviewId, id)`. Nullable actor допускается. Отдельные relations к `Question` сохраняют удобные выборки reusable задач.
 
 В migration SQL добавлены три правила: CHECK `InterviewQuestion.order >= 0`, CHECK обязательного `userId` для `INTERVIEWER` и partial unique index, допускающий одного `CANDIDATE` на интервью. Их нужно сохранять при review будущих migrations. Unique `(interviewId, userId)` запрещает повторный registered membership, сохраняя nullable guest identity.
 
-| Индексы                                                                     | Назначение                                     |
-| --------------------------------------------------------------------------- | ---------------------------------------------- |
-| `User.email`, `GuestToken.tokenHash`, `ParticipantSession.tokenHash` unique | Поиск пользователя и bearer hashes             |
-| `Interview.status`, `Interview.createdById`, `Question.createdById`         | Status filter и owner scope                    |
-| `InterviewQuestion(interviewId, questionId)` unique                         | Membership и защита от duplicate attachment    |
-| `InterviewQuestion(interviewId, order)` unique                              | Уникальный order и упорядоченная выборка задач |
-| `InterviewParticipant(interviewId, userId)` и `(interviewId, id)` unique    | Membership и composite FK для actor            |
-| `InterviewEvent(interviewId, createdAt)`, `CodeRun(interviewId, createdAt)` | Будущие timeline и результаты интервью         |
+| Индексы                                                                                     | Назначение                                     |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `User.email`, `GuestToken.tokenHash`, `ParticipantSession.tokenHash` unique                 | Поиск пользователя и bearer hashes             |
+| `Interview.status`, `Interview.createdById`, `Question.createdById`                         | Status filter и owner scope                    |
+| `InterviewQuestion(interviewId, questionId)` unique                                         | Membership и защита от duplicate attachment    |
+| `InterviewQuestion(interviewId, order)` unique                                              | Уникальный order и упорядоченная выборка задач |
+| `InterviewParticipant(interviewId, userId)` и `(interviewId, id)` unique                    | Membership и composite FK для actor            |
+| `InterviewEvent(interviewId, createdAt)`, `CodeRun(interviewId, questionId, createdAt, id)` | Timeline и question-scoped run history         |
 
 Составные индексы связей начинаются с `interviewId` и покрывают поиск по этому левому префиксу. Отдельные индексы только на `InterviewQuestion.interviewId` и `InterviewParticipant.interviewId` повторяли бы существующий доступ. Текстовые фильтры сейчас используют `contains`; full-text или trigram index выбирается по реальным объёмам и запросам.
 
@@ -413,7 +413,7 @@ Reset создаёт новую generation документа и отзывае�
 
 Presence и cursor/selection остаются ephemeral. Heartbeat/disconnect detection снимают отсутствующих участников, а UI показывает reconnect отдельно от offline. SQL не получает записи на каждое движение курсора или символ.
 
-## Browser code execution — PHASE 9
+## Browser code execution and run history — PHASE 9–10
 
 Execution flow is deliberately local to `apps/web`:
 
@@ -434,7 +434,25 @@ The worker response carries CSP: `default-src 'none'; script-src 'self' 'unsafe-
 
 `console.log`, `info`, `warn` and `error` are captured into ordered entries. Values use bounded readable serialization for strings, primitives, errors, arrays and objects; circular references are marked. Per-entry, entry-count and total-output caps append `[output truncated]`. The UI renders runtime failures in Output rather than throwing them into the parent React tree. Each result has `interviewQuestionId` and `runId`; the editor cancels and clears its result when its question unmounts or the interview finishes. Only the local initiator sees the result.
 
-The existing Prisma `CodeRun` model remains unchanged and unused. Client-reported output is not trusted evidence, and persisting it now would require new actor authorization, API operations, validation and retention rules. A later phase can define those guarantees if an interview timeline needs runs.
+Completed execution results are persisted in `CodeRun` by a separate `recordCodeRun` GraphQL mutation. The flow is:
+
+```mermaid
+flowchart LR
+  YText["Y.Text / active Monaco model"] -->|"capture once"| Snapshot["Immutable source snapshot"]
+  Snapshot --> Worker["Browser Worker"]
+  Worker --> Result["Local execution result + Output"]
+  Result -->|"recordCodeRun after completion"| GraphQL["GraphQL API"]
+  GraphQL --> DB[("CodeRun / PostgreSQL")]
+  DB -->|"GetCodeRuns by InterviewQuestion.id"| History["Read-only Run History"]
+```
+
+`CodeRun` stores the snapshot in its existing `codeSnapshot` column, maps its existing question relation to the attached `InterviewQuestion`, and derives language from the frozen question snapshot. Its unique primary key uses the Worker-generated `runId` as the idempotency key. The minimal PHASE 10 migration narrows persisted statuses to the Worker terminal states (`SUCCESS`, `RUNTIME_ERROR`, `TIMEOUT`) and adds an index ordered for question history; generic legacy `FAILED`/`ERROR` rows migrate to `RUNTIME_ERROR`. No participant ID or user result is accepted as a trusted identity/value.
+
+The API derives participant identity from the interviewer auth context or verified candidate bearer. Writes require an interview owner/member or candidate session for the same interview, an attached question, an `IN_PROGRESS` interview, JavaScript/TypeScript, bounded source/output/duration and a terminal Worker status. Candidate queries are restricted to their own participant; the owning interviewer sees the interview's history. `codeRuns` accepts limit/offset with default 20 and maximum 50 and sorts newest first by `createdAt`, then `id` for deterministic ties. History is keyed by `InterviewQuestion.id`, not the reusable Question ID.
+
+Output for the just-completed Run stays in local React state and is shown before/during the save request. Apollo receives only the independent persisted query/mutation data; the UI does not optimistically append a run. After a successful mutation it refetches the current history page. If saving fails or the browser is offline, the output remains and shows a separate history-save failure. No offline queue is implemented. History expands read-only source/stdout/stderr and never re-executes old code; there is no restore action.
+
+**A `CodeRun` result is client-reported and is not a trusted judge verdict.** `SUCCESS` says only that the browser reported a Worker completion without a runtime error; a modified client can forge it. The API validates authorization and storage limits but never evaluates user code. This persistence is for interviewer/candidate history only, not scoring or correctness validation.
 
 Sandpack offers an integrated editor-independent live JavaScript/Node preview and supports a richer React project workflow, but introduces a larger runtime/bundler integration than a single-snippet runner needs. [Sandpack](https://sandpack.codesandbox.io/). WebContainers provide an in-browser Node.js filesystem/process environment; they require SharedArrayBuffer/cross-origin isolation, impose browser support constraints and may need a commercial API license. [WebContainers browser support](https://developer.stackblitz.com/platform/webcontainers/browser-support), [WebContainer API FAQ](https://developer.stackblitz.com/guides/user-guide/general-faqs). A first-party Worker is smaller and needs no external service or new package, and its termination API directly meets the infinite-loop requirement. Its narrower language support is why this phase does not claim React TSX execution.
 
@@ -452,8 +470,9 @@ Sandpack offers an integrated editor-independent live JavaScript/Node preview an
 | 7    | Завершён: question-scoped presence, Awareness identity, remote cursors/selections и cleanup              |
 | 8    | Realtime Session Events                                                                                  |
 | 9    | Complete: CSP-restricted browser Code Runner; manual browser smoke passed                                |
-| 10   | Private notes, timeline, finish sequencing и result page                                                 |
-| 11   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
-| 12   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
+| 10   | Implemented: persisted CodeRun history; manual browser smoke pending                                     |
+| 11   | Private notes, timeline, finish sequencing и result page                                                 |
+| 12   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
+| 13   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
 
-Проверки добавляются вместе с поведением, а не откладываются целиком до PHASE 10. PHASE 6/7 добавили authorization и ephemeral collaboration tests; DB-backed suites зависят от PostgreSQL и корректного package-manager/runtime окружения. Durable Yjs persistence, business events и interviewer login остаются будущей работой. Browser smoke PHASE 7 пропущен, так как доступный in-app browser runtime не предоставил браузерных контекстов. Commit и push не выполнялись.
+Проверки добавляются вместе с поведением. PHASE 10 добавляет DB-backed authorization/idempotency/pagination cases и frontend coverage для captured snapshots, execution statuses, save failure, read-only history и question scoping. DB-backed suites требуют PostgreSQL и используют выделенные временные test schemas. Durable Yjs persistence, private notes, interviewer authentication, trusted judging и replay остаются будущей работой. PHASE 7–9 manual browser smoke passed; PHASE 10 smoke awaits the user.

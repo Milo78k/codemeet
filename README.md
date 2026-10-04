@@ -6,7 +6,7 @@ CodeMeet — fullstack pet-project для технических интервь�
 
 ## Текущий этап
 
-**PHASE 9 — Safe Code Runner — implementation and manual browser smoke PASS.** JavaScript and TypeScript run from an immutable snapshot of the current collaborative Monaco model in a separate browser Worker. React TSX is explicitly unsupported for execution. The API never executes user code; only the participant who clicked Run sees its output. See the [PHASE 9 report](docs/phase-9-report.md) for implementation and verification status.
+**PHASE 10 — Code Run History — implementation complete; manual browser smoke pending.** JavaScript and TypeScript run from an immutable snapshot of the current collaborative Monaco model in a separate browser Worker. Completed client-reported results are saved through GraphQL and shown in a read-only history for the current interview question. A saved result is not a trusted judge verdict, and the API never executes user code. See the [PHASE 10 report](docs/phase-10-report.md) for the smoke flow and verification status.
 
 В репозитории настроены pnpm, Turborepo, TypeScript strict, ESLint и Prettier. Будущие библиотеки устанавливаются тогда, когда для них появляется функциональность.
 
@@ -16,7 +16,7 @@ CodeMeet — fullstack pet-project для технических интервь�
 - Создание интервью, выбор задач и гостевой вход кандидата без регистрации.
 - Monaco Editor с JavaScript, TypeScript и React/TSX; Yjs collaboration и remote cursors.
 - Presence, reconnect и синхронизация документов после краткого отключения.
-- JavaScript/TypeScript browser execution и локальный console output; React TSX preview ещё не реализован.
+- JavaScript/TypeScript browser execution, локальный console output и persisted read-only run history; React TSX preview ещё не реализован.
 - Приватные заметки с backend authorization; итоговая страница с snapshots, runs и timeline.
 
 Эти пункты являются roadmap, а не уже доступными функциями.
@@ -113,6 +113,8 @@ apps/
           api/questions.graphql
         interviews/          # dashboard, creation, summary, session, status actions
           editor/            # Monaco adapter, models, drafts, Reset confirmation
+        code-runner/          # Worker execution, result persistence and read-only history
+          api/code-runs.graphql
           api/interviews.graphql
       shared/
         api/                 # Apollo factory/provider/cache/errors
@@ -395,7 +397,7 @@ mutation StartInterview($interviewId: ID!) {
 
 ### Frontend pipeline — PHASE 2
 
-Pipeline: API SDL → `features/*/api/*.graphql` → GraphQL Code Generator → `shared/api/generated/graphql.ts` → Apollo hook → React. Одиннадцать operations описаны по domain, включая SetActiveQuestion PHASE 3; типы results/variables выводятся из generated TypedDocumentNode.
+Pipeline: API SDL → `features/*/api/*.graphql` → GraphQL Code Generator → `shared/api/generated/graphql.ts` → Apollo hook → React. Operations описаны по domain, включая persisted CodeRun history PHASE 10; типы results/variables выводятся из generated TypedDocumentNode.
 
 `apps/web/codegen.ts` использует `typescript-operations` + `typed-document-node`. Текущая рекомендация Apollo 4 предпочитает эти plugins client preset; специальные React hooks не генерируются. Enums в operations v6 представлены union types. [Apollo Codegen](https://www.apollographql.com/docs/react/development-testing/graphql-codegen)
 
@@ -411,9 +413,9 @@ GraphQL/Apollo отвечает за business state. Monaco ↔ y-monaco ↔ Y.T
 
 `/collaboration` обслуживает binary Yjs document sync и Awareness protocol; его room и presence scoped к паре interview/question, а `disableBc: true` требует путь через API вместо межтабового BroadcastChannel. `/session-events/:interviewId` — отдельный JSON WebSocket на том же HTTP server и с отдельной авторизацией; он сообщает о смене active question и Finish. Это Interview scope, не зависящий от смены Question room. На disconnect стандартный Awareness protocol удаляет участника; y-websocket восстанавливает состояние при reconnect. Session Event после аутентификации и при каждом reconnect вызывает canonical GraphQL refetch; после valid event refetch также приводит Session к текущему state. Поэтому потеря event не требует event replay. При рестарте API теряются несохранённые Yjs edits; SQL persistence для документов добавляется отдельно.
 
-## Apollo cache strategy — PHASE 2
+## Apollo cache strategy — PHASE 2, 10
 
-`User`, `Question` и `Interview` используют стандартную нормализацию `__typename:id`, без лишних `keyFields`. CodeRun пока не представлен frontend operation. Questions cache keys включают search/language/difficulty/limit, interviews — status/limit; offset исключён. Page size разделяет dashboard count/recent и library. Load more вызывает fetchMore, сохраняет offset positions; read дедуплицирует IDs. Следующий offset берётся из server pageInfo, а не количества rendered rows. Refetch offset0 заменяет загруженные pages.
+`User`, `Question`, `Interview` и `CodeRun` используют стандартную нормализацию `__typename:id`, без лишних `keyFields`. `GetCodeRuns` всегда получает `interviewId` и `InterviewQuestion.id`, а также limit/offset; отдельные страницы не смешивают history прикреплённых задач. CodeRun query загружает только persisted history. Текущий запуск, его логи и running state остаются локальными. Questions cache keys включают search/language/difficulty/limit, interviews — status/limit; offset исключён. Page size разделяет dashboard count/recent и library. Load more вызывает fetchMore, сохраняет offset positions; read дедуплицирует IDs. Следующий offset берётся из server pageInfo, а не количества rendered rows. Refetch offset0 заменяет загруженные pages.
 
 CreateQuestion/CreateInterview нормализуют entity и evict только соответствующий list field перед navigation: следующий экран запрашивает свежую первую страницу. AddQuestionToInterview нормализует interview и очищает interview lists, поскольку attachment может менять DRAFT → READY. Start/Finish обновляют summary/entity, инвалидируют interviews lists из-за status membership; dashboard перечитывает только собственный список. SetActiveQuestion возвращает InterviewFields, нормализует active question и не требует list eviction/refetch. UpdateQuestion document готов: entity fields нормализуются, а при будущей форме изменения search/filter membership потребует questions invalidation. Refetch всех queries не используется; ручной prepend в paginated/filter lists не искажает count/order.
 
@@ -423,11 +425,25 @@ Yjs отвечает за concurrent text edits и слияние updates пос
 
 PHASE 5 покрывает concurrent edits, reconnect convergence и shared Reset; PHASE 6 добавляет identity/access gates; PHASE 7 добавляет ephemeral Awareness без изменения CRDT semantics. Локальный Y.Doc сохраняется при кратком reconnect, но живёт только в памяти API. Уже открытый socket не получает мгновенный revoke/status event, если session отозвали или interview завершён в другом процессе.
 
-## Code execution — PHASE 9
+## Code execution and run history — PHASE 9–10
 
-При Run интерфейс сразу копирует текст активной Monaco-модели, связанной с Y.Text, и отправляет эту строку в отдельный Web Worker. Worker запускает только этот snapshot, собирает `console.log/info/warn/error`, ограничивает объём вывода и завершается после результата или deadline около 5 секунд. Переключение вопроса, Finish и unmount завершают текущий Worker. Worker response имеет CSP `connect-src 'none'`; source не отправляется GraphQL/API. В Y.Doc не записываются Run state и output, Apollo cache их не содержит.
+Flow после завершённого Run:
 
-Поддерживаются JavaScript и standalone TypeScript snippets. TypeScript транспилируется браузерным компилятором, загружаемым только при первом TypeScript Run; типовая проверка и внешние пакеты не входят в эту поддержку. React TSX показан как неподдерживаемый: для него нужен отдельный React preview и граф файлов. Итог запуска локален инициатору. Существующая Prisma-модель `CodeRun` пока не используется: клиентский результат не считается доверенным verdict, а persistence потребовала бы отдельного authorization и API-контракта.
+```mermaid
+flowchart LR
+  YText["Y.Text / active Monaco model"] -->|"capture once"| Snapshot["Immutable source snapshot"]
+  Snapshot --> Worker["Browser Worker"]
+  Worker --> Result["Local execution result + Output"]
+  Result -->|"recordCodeRun after completion"| GraphQL["GraphQL API"]
+  GraphQL --> DB[("CodeRun / PostgreSQL")]
+  DB -->|"GetCodeRuns by InterviewQuestion.id"| History["Read-only Run History"]
+```
+
+При Run интерфейс сразу копирует текст активной Monaco-модели, связанной с Y.Text, и отправляет эту строку в отдельный Web Worker. Worker запускает только этот snapshot, собирает `console.log/info/warn/error`, ограничивает объём вывода и завершается после результата или deadline около 5 секунд. Переключение вопроса, Finish и unmount завершают текущий Worker. Worker response имеет CSP `connect-src 'none'`; source передаётся API только после завершения для сохранения истории. В Y.Doc не записываются Run state и output.
+
+Поддерживаются JavaScript и standalone TypeScript snippets. TypeScript транспилируется браузерным компилятором, загружаемым только при первом TypeScript Run; типовая проверка и внешние пакеты не входят в эту поддержку. React TSX показан как неподдерживаемый: для него нужен отдельный React preview и граф файлов. Output текущего запуска немедленно остаётся локальным UI state. После завершения `recordCodeRun` сохраняет тот же captured source snapshot, status, stdout/stderr и duration; отдельный `GetCodeRuns` query заполняет компактную read-only историю текущего `InterviewQuestion.id`. История не исполняет старый код и не имеет действия восстановления в editor.
+
+`CodeRun` result is client-reported and is not a trusted judge verdict. `SUCCESS` означает только, что браузер сообщил об успешном завершении Worker без runtime error; злоумышленник может подделать mutation. API проверяет сессию, membership, ownership и лимиты, но никогда не запускает source. Если save mutation завершается ошибкой, локальный Output остаётся на экране, а UI показывает отдельный save failure; retry queue/offline persistence не создаётся.
 
 Это browser sandbox boundary для защиты UI/API от зависшего или случайно вредного сниппета, а не гарантия изоляции hostile code. Worker не получает application closures, DOM, токены или Apollo state; CSP блокирует сетевые подключения и nested workers. У приложения нет жёсткого контроля над памятью браузера и гарантий против browser-engine vulnerabilities. Подробные trade-offs и limitations: [docs/architecture.md](docs/architecture.md) и [docs/phase-9-report.md](docs/phase-9-report.md).
 
@@ -444,7 +460,7 @@ pnpm build
 
 `pnpm check` объединяет format, Codegen check, lint и typecheck. ESLint запрещает default exports в обычном коде; исключения — entry points, где framework/tool требует default export. TypeScript включает `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` и `noImplicitOverride`. Web typecheck проверяет Codegen и генерирует Next route types, поэтому работает и до первой сборки.
 
-Тесты добавляются вместе с поведением; PHASE 10 расширяет покрытие. Критические ошибки останавливают переход к следующей фазе.
+Тесты добавляются вместе с поведением. PHASE 10 добавляет DB-backed authorization/idempotency/pagination cases и Apollo/UI tests для разделения Output и persisted history. Критические ошибки останавливают переход к следующей фазе.
 
 В PHASE 1 добавлены Jest integration tests настоящего API + PostgreSQL. Выполните `pnpm test` после настройки `TEST_DATABASE_URL`; root task сначала собирает необходимые workspace packages. Тесты не мокают Prisma и не используют developer public schema: создают случайную `cm_test_<uuid>` в отдельной `_test` database, применяют сохранённую migration, выполняют seed и после suite удаляют только собственную schema. При setup error тоже выполняется cleanup. Jest использует compiled ESM без TS transformer и требует Node `--experimental-vm-modules`.
 
@@ -473,26 +489,27 @@ PHASE 4 добавляет domain/model lifecycle tests и session editor behavi
 - [x] [Finish confirmation](docs/screenshots/session-finish-confirmation.png).
 - [x] [Finished summary](docs/screenshots/session-finished-summary.png).
 - [ ] Interview Room: desktop light/dark и mobile panels после PHASE 5–7.
-- [ ] Interview Result: snapshots, runs, notes и timeline после PHASE 9.
+- [ ] Interview Result: snapshots, notes и timeline после PHASE 11.
 
 ## Roadmap
 
-| Фаза | Объём                                                               | Статус        |
-| ---- | ------------------------------------------------------------------- | ------------- |
-| 0    | Architecture, repository setup, strict TS, lint/format, README      | Каркас создан |
-| 1    | Database, migrations/seed, GraphQL API и TEMP DEMO AUTH boundary    | Реализовано   |
-| 2    | GraphQL Codegen, Apollo, library/forms/dashboard и cache policies   | Реализовано   |
-| 3    | Interview session, snapshots при Start, active question и Finish    | Реализовано   |
-| 4    | Monaco Editor Foundation, локальные drafts, language/models и Reset | Реализовано   |
-| 5    | Yjs/WebSocket collaborative editing и shared Reset                  | Реализовано   |
-| 6    | Guest invite, participant identity и WebSocket authorization        | Реализовано   |
-| 7    | Question-scoped presence, Awareness, remote cursors и selections    | Реализовано   |
-| 8    | Realtime Session Events                                             | Реализовано   |
-| 9    | Browser Code Runner для JavaScript/TypeScript                       | Реализовано   |
-| 10   | Private notes, timeline и result page                               | Запланировано |
-| 11   | Расширение permissions/race/realtime regression tests               | Запланировано |
-| 12   | Docker Compose, GitHub Actions и MVP verification                   | Запланировано |
+| Фаза | Объём                                                               | Статус                            |
+| ---- | ------------------------------------------------------------------- | --------------------------------- |
+| 0    | Architecture, repository setup, strict TS, lint/format, README      | Каркас создан                     |
+| 1    | Database, migrations/seed, GraphQL API и TEMP DEMO AUTH boundary    | Реализовано                       |
+| 2    | GraphQL Codegen, Apollo, library/forms/dashboard и cache policies   | Реализовано                       |
+| 3    | Interview session, snapshots при Start, active question и Finish    | Реализовано                       |
+| 4    | Monaco Editor Foundation, локальные drafts, language/models и Reset | Реализовано                       |
+| 5    | Yjs/WebSocket collaborative editing и shared Reset                  | Реализовано                       |
+| 6    | Guest invite, participant identity и WebSocket authorization        | Реализовано                       |
+| 7    | Question-scoped presence, Awareness, remote cursors и selections    | Реализовано                       |
+| 8    | Realtime Session Events                                             | Реализовано                       |
+| 9    | Browser Code Runner для JavaScript/TypeScript                       | Реализовано                       |
+| 10   | Persisted CodeRun history scoped to InterviewQuestion               | Реализовано; manual smoke pending |
+| 11   | Private notes, timeline и result page                               | Запланировано                     |
+| 12   | Расширение permissions/race/realtime regression tests               | Запланировано                     |
+| 13   | Docker Compose, GitHub Actions и MVP verification                   | Запланировано                     |
 
-Docker Compose сейчас поднимает только PostgreSQL. CI и Docker images web/api остаются для PHASE 11. За пределами MVP: видео/аудио, AI scoring, ATS, платежи, email, mobile IDE, другие runtime languages, Kubernetes, полный character replay и whiteboard.
+Docker Compose сейчас поднимает только PostgreSQL. CI и Docker images web/api остаются для PHASE 13. За пределами MVP: видео/аудио, AI scoring, ATS, платежи, email, mobile IDE, другие runtime languages, Kubernetes, полный character replay и whiteboard.
 
-PHASE 7, PHASE 8 и PHASE 9 browser smoke пройдены. Ограничения текущего MVP: TEMP DEMO AUTH остаётся общим interviewer principal; Y.Doc теряется при restart API; Code Runner исполняет один файл без внешних пакетов, а React TSX preview и durable `CodeRun` persistence отложены. PHASE 9 verification details and limitations are recorded in `docs/phase-9-report.md`.
+PHASE 7–9 browser smoke пройдены; PHASE 10 implementation checks are recorded and its manual smoke is pending. Ограничения текущего MVP: TEMP DEMO AUTH остаётся общим interviewer principal; Y.Doc теряется при restart API; Code Runner исполняет один файл без внешних пакетов, а React TSX preview и trusted judge отложены. PHASE 9 and 10 details: [PHASE 9 report](docs/phase-9-report.md), [PHASE 10 report](docs/phase-10-report.md).

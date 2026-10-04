@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import { act, renderHook } from '@testing-library/react';
 import { MessageChannel as NodeMessageChannel, Worker as NodeWorker } from 'node:worker_threads';
 import type { MessagePort as NodeMessagePort } from 'node:worker_threads';
 
@@ -15,6 +16,8 @@ import { CodeRunner } from '@/features/code-runner/lib/CodeRunner';
 import { appendOutputEntry, createOutputBuffer } from '@/features/code-runner/lib/output';
 import { formatConsoleArguments } from '@/features/code-runner/lib/serialize';
 import { transformExecutableSource } from '@/features/code-runner/lib/transpile';
+import { serializePersistedOutput } from '@/features/code-runner/lib/persisted-output';
+import { useCodeRunner } from '@/features/code-runner/useCodeRunner';
 
 import { installTestCodeRunner, TestCodeRunnerWorker } from './support/code-runner';
 
@@ -215,6 +218,56 @@ describe('browser code runner controller', () => {
     expect(result.status).toBe('unsupported');
     expect(result.stderr[0]).toMatch(/React TSX/i);
     expect(TestCodeRunnerWorker.instances).toHaveLength(0);
+  });
+});
+
+describe('persisted code run output', () => {
+  let restoreRunner: (() => void) | undefined;
+
+  afterEach(() => {
+    restoreRunner?.();
+    restoreRunner = undefined;
+    jest.useRealTimers();
+  });
+
+  test('retains line breaks while keeping combined persisted output inside the API limit', () => {
+    const stdout = serializePersistedOutput(['alpha', 'beta'], ['warning']);
+    expect(stdout).toEqual({ stdout: 'alpha\nbeta', stderr: 'warning' });
+
+    const bounded = serializePersistedOutput(
+      ['x'.repeat(10_000), 'y'.repeat(10_000)],
+      ['z'.repeat(100)],
+    );
+    expect(bounded.stdout.length + bounded.stderr.length).toBeLessThanOrEqual(
+      MAX_OUTPUT_TOTAL_CHARS,
+    );
+  });
+
+  test('reports timeout as a completed result with the same executed snapshot', async () => {
+    restoreRunner = installTestCodeRunner();
+    jest.useFakeTimers();
+    const onComplete = jest.fn();
+    const { result } = renderHook(() =>
+      useCodeRunner({
+        interviewQuestionId: questionId,
+        language: 'JAVASCRIPT',
+        enabled: true,
+        onComplete,
+      }),
+    );
+
+    act(() => result.current.run('while (true) {}'));
+    const worker = TestCodeRunnerWorker.instances[0];
+    expect(worker?.request?.source).toBe('while (true) {}');
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(CODE_RUN_TIMEOUT_MS);
+    });
+
+    expect(worker?.terminateCount).toBe(1);
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'timeout', interviewQuestionId: questionId }),
+      'while (true) {}',
+    );
   });
 });
 

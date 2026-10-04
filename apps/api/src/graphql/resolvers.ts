@@ -18,6 +18,7 @@ import {
   updateQuestion,
   type QuestionRecord,
 } from '../services/question.service.js';
+import { listCodeRuns, recordCodeRun, type CodeRunRecord } from '../services/code-run.service.js';
 import {
   createGuestInvite,
   inspectGuestInvite,
@@ -52,6 +53,9 @@ export const resolvers = {
         return findCandidateInterview(context.prisma, identity.participant.id, args.id);
       }
       return findInterview(context.prisma, identity.user.id, args.id);
+    },
+    async codeRuns(_parent: unknown, args: ResolverArgs, context: ApiContext) {
+      return listCodeRuns(context.prisma, await context.getIdentity(), args);
     },
   },
   Mutation: {
@@ -103,6 +107,14 @@ export const resolvers = {
         occurredAt: new Date().toISOString(),
       });
       return interview;
+    },
+    async recordCodeRun(_parent: unknown, args: ResolverArgs, context: ApiContext) {
+      return recordCodeRun(
+        context.prisma,
+        await context.getIdentity(),
+        args.interviewId,
+        args.input,
+      );
     },
   },
   User: {
@@ -163,6 +175,16 @@ export const resolvers = {
       context
         .getCurrentParticipant()
         .then((current) => (current ? null : 'user' in participant ? participant.user : null)),
+  },
+  CodeRun: {
+    interviewQuestionId: (run: CodeRunRecord) => run.interviewQuestion.id,
+    language: (run: CodeRunRecord) =>
+      run.interviewQuestion.snapshotLanguage ?? run.interviewQuestion.question.language,
+    sourceSnapshot: (run: CodeRunRecord) => run.codeSnapshot,
+    stdout: (run: CodeRunRecord) => run.stdout ?? '',
+    stderr: (run: CodeRunRecord) => run.stderr ?? '',
+    createdByParticipant: (run: CodeRunRecord) => run.createdByParticipant,
+    createdAt: (run: CodeRunRecord) => run.createdAt.toISOString(),
   },
   InterviewQuestion: {
     question: (
