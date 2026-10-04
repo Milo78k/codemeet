@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import type { InterviewFieldsFragment } from '../../shared/api/generated/graphql';
+import { formatDateTime } from '../../shared/lib/format';
 import { StatusBadge } from '../../shared/ui/Badge';
 import { Icon } from '../../shared/ui/Icon';
 import styles from '../../shared/ui/workspace.module.css';
@@ -18,17 +19,7 @@ export function InterviewSessionHeader({
   finishDisabled: boolean;
   onFinish: () => void;
 }) {
-  const startedTime = interview.startedAt ? new Date(interview.startedAt) : null;
-  const startedLabel =
-    startedTime && !Number.isNaN(startedTime.getTime())
-      ? new Intl.DateTimeFormat('en', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'UTC',
-        }).format(startedTime)
-      : null;
+  const startedLabel = formatDateTime(interview.startedAt);
 
   return (
     <header className={styles.sessionHeader}>
@@ -40,9 +31,9 @@ export function InterviewSessionHeader({
         <div className={styles.eyebrow}>Interview session</div>
         <h1 className={styles.title}>{interview.title}</h1>
         {participantName && <p className={styles.subtitle}>Joined as {participantName}</p>}
-        {startedLabel && (
+        {startedLabel !== '—' && (
           <p className={styles.subtitle}>
-            Started <time dateTime={interview.startedAt ?? undefined}>{startedLabel} UTC</time>
+            Started <time dateTime={interview.startedAt ?? undefined}>{startedLabel}</time>
           </p>
         )}
       </div>

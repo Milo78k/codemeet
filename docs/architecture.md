@@ -2,7 +2,20 @@
 
 ## Статус документа
 
-**PHASE 11 implementation in progress; manual browser smoke pending.** PHASE 10's manual browser smoke passed. JavaScript and standalone TypeScript execute in a browser Worker; completed client-reported output is persisted as `CodeRun` history. The owner-only Results query uses persisted Interview, InterviewQuestion snapshots, participants, CodeRuns and key InterviewEvents. Results are descriptive records, not an automated score or trusted judge verdict. React TSX execution, durable Yjs persistence and production interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md), [phase-11-report.md](phase-11-report.md).
+**PHASE 0–11 are complete. PHASE 12 is final documentation, consistency and portfolio-readiness polish; manual final verification remains required.** JavaScript and standalone TypeScript execute in a browser Worker; completed client-reported output is persisted as `CodeRun` history. The owner-only Results query uses persisted Interview, InterviewQuestion snapshots, participants, CodeRuns and key InterviewEvents. Results are descriptive records, not an automated score or trusted judge verdict. React TSX execution, durable Yjs persistence, multi-replica realtime and production interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md), [phase-11-report.md](phase-11-report.md) and [phase-12-report.md](phase-12-report.md).
+
+## Architecture summary
+
+| Concern                   | Source of truth                                               | Flow                                                                                  |
+| ------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Persistent business state | PostgreSQL                                                    | GraphQL → services → Prisma → PostgreSQL                                              |
+| Collaborative source      | Active question's Yjs document in the API process             | Monaco ↔ Y.Text/Y.Doc ↔ WebSocket ↔ Yjs provider                                      |
+| Presence and cursors      | Ephemeral Awareness state                                     | Awareness ↔ authenticated participant identity; room-scoped and removed on disconnect |
+| Business realtime         | Committed database state                                      | GraphQL mutation → database commit → Session Event → canonical client refetch         |
+| Code execution            | Captured client source snapshot                               | Y.Text snapshot → browser Worker → local result → `recordCodeRun` → PostgreSQL        |
+| Interview Results         | Persisted interview, snapshots, participants, runs and events | FINISHED interview → GraphQL Results query → descriptive owner-only summary           |
+
+Yjs/Awareness and Session Events are separate WebSocket protocols on the API server. Events invalidate client state; PostgreSQL-backed GraphQL remains canonical. The browser execution result is client-reported: **SUCCESS ≠ solved**, and CodeMeet has no trusted judge verdict.
 
 ## Реализованный pipeline PHASE 2–7
 
@@ -389,7 +402,7 @@ Events ephemeral: уведомление может потеряться меж�
 
 `InterviewEvent` остаётся persistent audit/history записью в транзакции и не используется как transport queue. В этой фазе нет replay, outbox или cross-process pub/sub; fanout хранится в памяти одного API process. Для нескольких API replicas потребуется общий event routing/outbox и координация Yjs rooms. Мгновенный revoke event для уже открытого socket также остаётся будущей работой.
 
-## Server persistence, snapshots и гонки — план следующих фаз
+## Durability boundaries and future persistence
 
 PHASE 3 сохраняет immutable condition/starter-code snapshots в InterviewQuestion при Start. PHASE 4 добавила Monaco models, PHASE 5 подключила к ним per-question Yjs documents. Состояние Yjs сейчас только in-memory на API и теряется после его restart; `CodeDocument`, starter-file records, durable Yjs state, room locks и business version пока отсутствуют. Следующие требования относятся к будущей server persistence и завершению business lifecycle.
 
@@ -475,23 +488,16 @@ flowchart TD
 
 The Results UI needs no previous Apollo session cache and no Yjs, Awareness, Session Events, polling or browser Worker connection. Hard refresh loads the same persisted data. Source, stdout and stderr are exposed only after backend owner authorization. Last `SUCCESS` is a browser-reported execution fact: there is no solved/best-run heuristic, scoring, AI review or trusted judge.
 
-## Границы будущих фаз
+## Статус фаз и будущие возможности
 
-| Фаза | Следующий результат                                                                                      |
-| ---- | -------------------------------------------------------------------------------------------------------- |
-| 0    | Завершён: repository scaffold, strict TypeScript, lint/format, документация и HTTP health                |
-| 1    | Завершён: PostgreSQL/Prisma, migrations/seed, Yoga/SDL, services, ownership и реальные integration tests |
-| 2    | Реализован: GraphQL Codegen, Apollo/cache, dashboard, library/forms, interview summary и frontend tests  |
-| 3    | Реализован: отдельная session, snapshot-at-start, active question и подтверждённый Finish                |
-| 4    | Реализован: Monaco Editor, локальные per-question drafts, language/models lifecycle и confirmed Reset    |
-| 5    | Реализован: Yjs/WebSocket collaborative editing, per-question rooms, статус соединения и shared Reset    |
-| 6    | Реализован: guest invite/session, candidate GraphQL scope и авторизованный Yjs WS handshake              |
-| 7    | Завершён: question-scoped presence, Awareness identity, remote cursors/selections и cleanup              |
-| 8    | Realtime Session Events                                                                                  |
-| 9    | Complete: CSP-restricted browser Code Runner; manual browser smoke passed                                |
-| 10   | Implemented: persisted CodeRun history; manual browser smoke passed                                      |
-| 11   | Interview Results, snapshot summaries and timeline; manual browser smoke pending                         |
-| 12   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
-| 13   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
+| Фазы | Результат                                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------------------- |
+| 0–4  | Завершены: repository foundation, GraphQL/PostgreSQL domain, frontend, session lifecycle и Monaco editor. |
+| 5–8  | Завершены: Yjs collaboration, guest access, Awareness presence и realtime Session Events.                 |
+| 9–10 | Завершены: browser Worker runner и persisted client-reported CodeRun history.                             |
+| 11   | Завершена: owner-only descriptive Results, frozen question summaries, run history и timeline.             |
+| 12   | Final portfolio-readiness polish; manual final verification is required.                                  |
 
-Проверки добавляются вместе с поведением. PHASE 10 добавила DB-backed authorization/idempotency/pagination cases и frontend coverage для captured snapshots, execution statuses, save failure, read-only history и question scoping. PHASE 11 добавляет Results authorization, aggregation/timeline и frontend empty/error/refresh/history checks. DB-backed suites требуют PostgreSQL и используют выделенные временные test schemas. Durable Yjs persistence, private notes, production interviewer authentication, trusted judging и replay остаются будущей работой. PHASE 7–10 manual browser smoke passed; PHASE 11 smoke awaits manual review.
+DB-backed suites требуют PostgreSQL и используют отдельные временные test schemas. PHASE 9–11 reports фиксируют автоматические и ручные проверки соответствующих фаз. Future work включает durable Yjs persistence, private notes, production interviewer authentication, trusted judging, replay и multi-replica realtime; это не реализованные возможности.
+
+Тесты добавлялись вместе с поведением: API integration tests покрывают ownership, transitions, concurrency, guest authorization, realtime transport, CodeRun persistence и Results access/aggregation; frontend suites покрывают forms, session lifecycle, collaboration adapters, runner/history и Results states. Ручная финальная проверка PHASE 12 приведена в [phase-12-report.md](phase-12-report.md) и не считается выполненной автоматически.

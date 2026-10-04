@@ -168,6 +168,176 @@
   gap: 24px;
   margin-bottom: 30px;
 }
+.overviewHeader {
+  margin-bottom: 26px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.overviewHeaderTop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px 20px;
+}
+.overviewHeading {
+  min-width: 0;
+}
+.overviewTitleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.overviewTitleRow .title {
+  margin-bottom: 0;
+}
+.overviewHeading .subtitle {
+  margin-top: 7px;
+}
+.overviewHeaderActions,
+.overviewActions,
+.actionGroupButtons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.overviewHeaderActions {
+  justify-content: flex-end;
+  padding-top: 18px;
+}
+.overviewActions {
+  justify-content: flex-end;
+}
+.destructiveButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #e8c7c3;
+  border-radius: 7px;
+  padding: 9px 16px;
+  background: #fff;
+  color: #913d35;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.destructiveButton:hover:not(:disabled) {
+  background: #fff5f3;
+}
+.destructiveButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.guestInviteCard,
+.guestInviteCompact {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fbfcf8;
+}
+.starterCodeEditor {
+  height: 190px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+}
+.starterCodeLoading {
+  display: grid;
+  height: 100%;
+  min-height: 120px;
+  place-items: center;
+  color: #66715f;
+  font-size: 12px;
+}
+.starterCodeError {
+  margin: 0;
+  padding: 14px;
+  color: #a3362a;
+  font-size: 12px;
+}
+.guestInviteCard {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px 20px;
+  padding: 16px 20px;
+}
+.guestInviteCompact {
+  display: grid;
+  gap: 9px;
+  width: min(300px, 100%);
+  padding: 12px;
+}
+.guestInviteTitle {
+  margin: 0;
+  color: #354333;
+  font-size: 13px;
+  font-weight: 650;
+}
+.guestInviteExpiry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  margin: 0;
+  color: #66715f;
+  font-size: 12px;
+}
+.guestInviteExpiry span {
+  color: #87917e;
+}
+.guestInviteActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.guestInviteActions .secondaryButton {
+  white-space: nowrap;
+}
+.guestInviteFeedback,
+.guestInviteCopyError {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+}
+.guestInviteFeedback {
+  color: var(--accent);
+}
+.guestInviteCopyError {
+  display: grid;
+  gap: 7px;
+  color: #913d35;
+}
+.guestInviteCopyError p {
+  margin: 0;
+}
+.guestInviteManualLabel {
+  display: grid;
+  gap: 5px;
+  color: #66715f;
+}
+.guestInviteManualLabel input {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 9px;
+  background: #fff;
+  color: var(--foreground);
+  font: 12px var(--font-mono, ui-monospace, monospace);
+}
+.overviewActionError {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #913d35;
+  font-size: 12px;
+}
 .eyebrow {
   display: flex;
   align-items: center;
@@ -714,6 +884,9 @@
   align-items: end;
   gap: 5px;
 }
+.actionGroupButtons {
+  justify-content: flex-end;
+}
 .actionGroup .errorNotice {
   max-width: 270px;
   white-space: normal;
@@ -984,6 +1157,21 @@
 .sessionQuestionActive:hover:not(:disabled) {
   background: #e6efdf;
 }
+.sessionQuestionCurrent {
+  border-color: #e3e9dc;
+  border-radius: 7px;
+  background: #fbfcf8;
+  cursor: default;
+}
+.sessionQuestionCurrent .sessionQuestionName {
+  margin-bottom: 6px;
+}
+.activeQuestionCurrentLabel {
+  display: inline-block;
+  margin-top: 7px;
+  color: #66715f;
+  font-size: 10px;
+}
 .sessionQuestionButton:disabled {
   cursor: not-allowed;
   opacity: 0.65;
@@ -1012,6 +1200,35 @@
 }
 .sessionMobileQuestions {
   display: none;
+}
+.activeQuestionSelect {
+  min-height: 36px;
+  padding: 8px 34px 8px 10px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%2366715f' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.activeQuestionSelect:focus-visible {
+  outline-width: 2px;
+  outline-offset: 2px;
+}
+.activeQuestionReadonly {
+  min-width: 0;
+  min-height: 36px;
+  overflow: hidden;
+  border: 1px solid #dce2d8;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #fbfcf8;
+  color: #455341;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sessionQuestion {
   min-width: 0;
@@ -1201,6 +1418,16 @@
   .summaryGrid {
     grid-template-columns: 1fr;
   }
+  .overviewHeaderTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overviewHeaderActions {
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+  .guestInviteCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .formAside {
     max-width: none;
   }
@@ -1296,6 +1523,48 @@
   .pageHeader {
     margin-bottom: 25px;
     gap: 18px;
+  }
+  .overviewHeader {
+    margin-bottom: 24px;
+    padding-bottom: 18px;
+  }
+  .overviewHeaderTop {
+    gap: 14px;
+  }
+  .overviewTitleRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .overviewTitleRow .title {
+    margin-bottom: 7px;
+  }
+  .overviewHeaderActions,
+  .overviewActions,
+  .actionGroupButtons,
+  .guestInviteActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+    width: 100%;
+  }
+  .overviewHeaderActions > *,
+  .overviewActions > *,
+  .actionGroupButtons > *,
+  .guestInviteActions > * {
+    width: 100%;
+  }
+  .guestInviteCard,
+  .guestInviteCompact {
+    width: 100%;
+    padding: 13px;
+  }
+  .guestInviteExpiry {
+    overflow-wrap: anywhere;
+  }
+  .actionGroup {
+    align-items: stretch;
+    width: 100%;
   }
   .cardGrid {
     grid-template-columns: 1fr;

@@ -40,31 +40,45 @@ export function InterviewDetailsPage({ interviewId }: { interviewId: string }) {
         <LoadingState label="Loading interview…" />
       ) : interview ? (
         <>
-          <div className={styles.pageHeader}>
-            <div>
-              <div className={styles.eyebrow}>Interview overview</div>
-              <h1 className={styles.title}>{interview.title}</h1>
-              <p className={styles.subtitle}>
-                Your selected questions and the current interview status.
-              </p>
-            </div>
-            <div className={styles.headerActions}>
-              <StatusBadge status={interview.status} />
-              {interview.status === 'IN_PROGRESS' && (
-                <Link href={`/interviews/${interview.id}/session`} className={styles.primaryButton}>
-                  Open session
-                  <Icon name="arrow" />
-                </Link>
+          <header className={styles.overviewHeader}>
+            <div className={styles.overviewHeaderTop}>
+              <div className={styles.overviewHeading}>
+                <div className={styles.eyebrow}>Interview overview</div>
+                <div className={styles.overviewTitleRow}>
+                  <h1 className={styles.title}>{interview.title}</h1>
+                  <StatusBadge status={interview.status} />
+                </div>
+                <p className={styles.subtitle}>
+                  Your selected questions and the current interview status.
+                </p>
+              </div>
+              {interview.createdBy && (
+                <InterviewActions
+                  interview={interview}
+                  variant="overview"
+                  primaryAction={
+                    interview.status === 'IN_PROGRESS' ? (
+                      <Link
+                        href={`/interviews/${interview.id}/session`}
+                        className={styles.primaryButton}
+                      >
+                        Open session
+                        <Icon name="arrow" />
+                      </Link>
+                    ) : interview.status === 'FINISHED' ? (
+                      <Link
+                        href={`/interviews/${interview.id}/results`}
+                        className={styles.primaryButton}
+                      >
+                        View results
+                        <Icon name="arrow" />
+                      </Link>
+                    ) : null
+                  }
+                />
               )}
-              {interview.status === 'FINISHED' && interview.createdBy && (
-                <Link href={`/interviews/${interview.id}/results`} className={styles.primaryButton}>
-                  View results
-                  <Icon name="arrow" />
-                </Link>
-              )}
-              {interview.createdBy && <InterviewActions interview={interview} />}
             </div>
-          </div>
+          </header>
           <div className={styles.summaryGrid}>
             <section>
               <div className={styles.sectionHeader}>

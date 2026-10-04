@@ -131,9 +131,9 @@ Candidate denial was verified through the API integration flow, not a second bro
 - Decide a retention/deletion policy for source snapshots and output.
 - Private notes remain a separate future capability and are not included in Results.
 
-## 18. Next logical phase
+## 18. State when PHASE 11 closed
 
-Private interviewer notes with server-side ownership and authorization can be designed as a separate phase. No later phase is started by this implementation.
+At PHASE 11 close, private interviewer notes with server-side ownership and authorization remained future work. PHASE 12 is the final portfolio-readiness polish; it does not add private notes or other large product capabilities.
 
 ## 19. Technical interviewer questions
 

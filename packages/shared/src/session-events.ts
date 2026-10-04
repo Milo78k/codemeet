@@ -6,13 +6,20 @@ export type ActiveQuestionChangedEvent = {
   occurredAt: string;
 };
 
+export type InterviewStartedEvent = {
+  type: 'INTERVIEW_STARTED';
+  interviewId: string;
+  occurredAt: string;
+};
+
 export type InterviewFinishedEvent = {
   type: 'INTERVIEW_FINISHED';
   interviewId: string;
   occurredAt: string;
 };
 
-export type SessionEvent = ActiveQuestionChangedEvent | InterviewFinishedEvent;
+export type SessionEvent =
+  ActiveQuestionChangedEvent | InterviewStartedEvent | InterviewFinishedEvent;
 
 export type SessionEventServerMessage =
   { type: 'authenticated' } | { type: 'session-event'; event: SessionEvent };
@@ -41,6 +48,13 @@ export function parseSessionEvent(value: unknown): SessionEvent | null {
   }
 
   if (value.type === 'ACTIVE_QUESTION_CHANGED') {
+    return {
+      type: value.type,
+      interviewId: value.interviewId,
+      occurredAt: value.occurredAt,
+    };
+  }
+  if (value.type === 'INTERVIEW_STARTED') {
     return {
       type: value.type,
       interviewId: value.interviewId,

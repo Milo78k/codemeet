@@ -95,6 +95,12 @@
   border-bottom: 1px solid var(--border);
   background: #fcfdfa;
 }
+.runnerHint {
+  margin: 0 22px 10px;
+  color: #66715f;
+  font-size: 11px;
+  line-height: 1.4;
+}
 .toolbarInfo {
   display: flex;
   align-items: center;
@@ -274,6 +280,17 @@
     margin-right: 16px;
     margin-left: 16px;
   }
+  .outputPanel {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+  .historyItem {
+    padding: 8px;
+  }
+  .historySummary {
+    gap: 4px 7px;
+    font-size: 11px;
+  }
   .resetDialog {
     padding: 24px;
   }
@@ -317,7 +334,23 @@
   border-radius: 8px;
   padding: 12px 14px;
   background: #fcfdfa;
-  min-height: 84px;
+  min-width: 0;
+}
+.outputCompact {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+}
+.outputSummary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.outputDuration {
+  color: #66715f;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .outputTitle {
   margin: 0 0 8px;
@@ -404,18 +437,36 @@
 }
 .historyList {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   padding: 0;
   margin: 12px 0;
   list-style: none;
 }
 .historyItem {
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
+  min-width: 0;
+  border: 1px solid #edf0e8;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fff;
+}
+.historyLatest {
+  border-color: #dce7d7;
+  background: #fbfdf9;
+}
+.historyRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
 }
 .historySummary {
+  min-width: 0;
   flex-wrap: wrap;
+  row-gap: 4px;
   font-size: 12px;
+}
+.historySeparator {
+  color: #b3bbad;
+  font-size: 10px;
 }
 .historyTime {
   color: #354333;
@@ -435,23 +486,35 @@
   color: #a3362a;
 }
 .historyDetails {
-  margin-top: 8px;
+  grid-column: 1 / -1;
   color: #354333;
   font-size: 11px;
 }
 .historyDetails summary {
+  width: fit-content;
+  margin-left: auto;
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: #526745;
+  font-size: 10px;
   cursor: pointer;
+}
+.historyDetails summary:hover {
+  background: #f1f5eb;
 }
 .historyDetailBody {
   display: grid;
   gap: 5px;
-  margin-top: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #edf0e8;
 }
 .historyDetailBody h4 {
   margin: 5px 0 0;
   font-size: 11px;
 }
 .historyDetailBody pre {
+  min-width: 0;
   max-height: 220px;
   overflow: auto;
   margin: 0;

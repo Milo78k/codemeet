@@ -15,6 +15,7 @@ import type { CodeExecutionResult } from '../../code-runner/model/execution';
 import { CodeOutput } from '../../code-runner/ui/CodeOutput';
 import { CodeRunHistory } from '../../code-runner/ui/CodeRunHistory';
 import { serializePersistedOutput } from '../../code-runner/lib/persisted-output';
+import { shouldShowFunctionInvocationHint } from '../../code-runner/lib/function-invocation-hint';
 import { isCodeRunnerLanguageSupported } from '../../code-runner/model/execution';
 import { useCodeRunner } from '../../code-runner/useCodeRunner';
 import type { InterviewDraftStore } from './draft-store';
@@ -159,7 +160,15 @@ function QuestionCodeEditor({
           if (currentRunId.current === result.runId) setHistorySaveStatus('failed');
         });
     },
-    [historyOffset, interviewId, interviewQuestionId, language, refetchHistory, saveCodeRun],
+    [
+      historyOffset,
+      interviewId,
+      interviewQuestionId,
+      language,
+      refetchHistory,
+      saveCodeRun,
+      setHistoryOffset,
+    ],
   );
   const codeRunner = useCodeRunner({
     interviewQuestionId,
@@ -266,7 +275,7 @@ function QuestionCodeEditor({
               : collaboration.status === 'reconnecting'
                 ? 'Reconnecting…'
                 : collaboration.status === 'disconnected'
-                  ? 'Disconnected'
+                  ? 'Offline'
                   : 'Connecting…'}
           </span>
           <span
@@ -299,6 +308,11 @@ function QuestionCodeEditor({
           {codeRunner.state.status === 'running' ? 'Running…' : 'Run'}
         </button>
       </div>
+      {shouldShowFunctionInvocationHint(draft.value) && (
+        <p className={styles.runnerHint}>
+          Functions are not invoked automatically. Call one to see its output.
+        </p>
+      )}
       <div className={styles.editorContainer}>
         {editorFailed ? (
           failure

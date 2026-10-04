@@ -87,7 +87,8 @@ describe('code runner editor controls', () => {
       });
       worker?.complete();
     });
-    expect(await screen.findByText('✓ Completed · 12 ms')).toBeInTheDocument();
+    expect(await screen.findByText('✓ Completed')).toBeInTheDocument();
+    expect(screen.getByText('12 ms')).toBeInTheDocument();
     expect(
       within(screen.getByLabelText('Code output')).getByRole('region', { name: 'Output' }),
     ).toHaveTextContent('hello');
@@ -117,7 +118,8 @@ describe('code runner editor controls', () => {
 
     act(() => worker?.complete('runtime_error', 'ReferenceError: boom'));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Runtime error · 12 ms');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Runtime error');
+    expect(screen.getByText('12 ms')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Errors' })).toHaveTextContent(
       'ReferenceError: boom',
     );
@@ -200,10 +202,11 @@ describe('code runner editor controls', () => {
     await user.click(screen.getByRole('button', { name: 'Run' }));
     act(() => TestCodeRunnerWorker.instances[0]?.complete());
 
-    expect(await screen.findByText('✓ Completed · 12 ms')).toBeInTheDocument();
+    expect(await screen.findByText('✓ Completed')).toBeInTheDocument();
+    expect(screen.getByText('12 ms')).toBeInTheDocument();
     expect(screen.getByText('No output.')).toBeInTheDocument();
     expect(await screen.findByText(/Run history could not be saved/)).toBeInTheDocument();
-    expect(screen.queryByText(/Runtime error ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Runtime error')).not.toBeInTheDocument();
   });
 
   test('persists runtime errors with their execution status and captured source', async () => {
@@ -307,7 +310,8 @@ describe('code runner editor controls', () => {
       />,
     );
 
-    expect(screen.getByRole('status')).toHaveTextContent('Execution timed out · 5000 ms');
+    expect(screen.getByRole('status')).toHaveTextContent('Execution timed out');
+    expect(screen.getByText('5 sec')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Errors' })).toHaveTextContent(
       'Execution timed out after 5 seconds.',
     );

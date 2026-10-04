@@ -13,6 +13,11 @@ const activeQuestionMutation = `
     }
   }
 `;
+const startMutation = `
+  mutation Start($interviewId: ID!) {
+    startInterview(interviewId: $interviewId) { id status activeQuestion { id } }
+  }
+`;
 const finishMutation = `
   mutation Finish($interviewId: ID!) {
     finishInterview(interviewId: $interviewId) { id status }
@@ -219,6 +224,40 @@ afterAll(async () => {
 });
 
 describe('Interview-scoped session event transport', () => {
+  test('a candidate waiting before start receives an after-commit start event only for their interview', async () => {
+    const interviewA = await createInterview({ start: false });
+    const interviewB = await createInterview({ start: false });
+    const candidateTokenA = await joinCandidate(interviewA);
+    const candidateTokenB = await joinCandidate(interviewB);
+    const candidateA = authenticateAsCandidate(interviewA, candidateTokenA);
+    const candidateB = authenticateAsCandidate(interviewB, candidateTokenB);
+    await Promise.all([
+      nextMessage(candidateA, (message) => message.type === 'authenticated'),
+      nextMessage(candidateB, (message) => message.type === 'authenticated'),
+    ]);
+
+    const started = expectSuccess(await graphQL(startMutation, { interviewId: interviewA }));
+    expect(started.startInterview).toMatchObject({
+      id: interviewA,
+      status: 'IN_PROGRESS',
+      activeQuestion: { id: questions[0].id },
+    });
+    const candidateMessage = await nextEvent(candidateA, 'INTERVIEW_STARTED');
+    expect(candidateMessage.event).toMatchObject({
+      type: 'INTERVIEW_STARTED',
+      interviewId: interviewA,
+    });
+    expect(await prisma.interview.findUniqueOrThrow({ where: { id: interviewA } })).toMatchObject({
+      status: 'IN_PROGRESS',
+      activeQuestionId: questions[0].id,
+    });
+    await expectNoEvent(candidateB, 'INTERVIEW_STARTED');
+
+    const duplicate = await graphQL(startMutation, { interviewId: interviewA });
+    expect(duplicate.errors).toHaveLength(1);
+    await expectNoEvent(candidateA, 'INTERVIEW_STARTED');
+  });
+
   test('authenticated interview participants receive active-question invalidations after commit only in their channel', async () => {
     const interviewA = await createInterview();
     const interviewB = await createInterview();

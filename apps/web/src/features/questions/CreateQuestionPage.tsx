@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { invalidateQuestionLists } from '../../shared/api/cache';
 import { getErrorMessage } from '../../shared/api/errors';
@@ -14,6 +14,7 @@ import { ErrorNotice, FieldError, SuccessNotice } from '../../shared/ui/Feedback
 import { Icon } from '../../shared/ui/Icon';
 import styles from '../../shared/ui/workspace.module.css';
 import { questionFormSchema, type QuestionFormValues } from './form-schema';
+import { StarterCodeEditor } from './StarterCodeEditor';
 
 export function CreateQuestionPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export function CreateQuestionPage() {
   });
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<QuestionFormValues>({
@@ -36,6 +38,7 @@ export function CreateQuestionPage() {
       starterCode: '',
     },
   });
+  const language = useWatch({ control, name: 'language' });
 
   async function submit(input: QuestionFormValues) {
     setSubmitError(null);
@@ -134,19 +137,30 @@ export function CreateQuestionPage() {
               </div>
             </div>
             <div>
-              <label htmlFor="question-starter-code" className={styles.formLabel}>
+              <label id="question-starter-code-label" className={styles.formLabel}>
                 Starter code
               </label>
-              <textarea
-                id="question-starter-code"
-                className={`${styles.textarea} ${styles.codeTextarea}`}
-                spellCheck={false}
-                placeholder="// A starting point for the candidate (optional)"
-                {...register('starterCode')}
-                aria-invalid={Boolean(errors.starterCode)}
-                aria-describedby={
-                  errors.starterCode ? 'question-starter-code-error' : 'question-starter-code-hint'
-                }
+              <Controller
+                control={control}
+                name="starterCode"
+                render={({ field }) => (
+                  <div
+                    role="group"
+                    aria-labelledby="question-starter-code-label"
+                    aria-describedby={
+                      errors.starterCode
+                        ? 'question-starter-code-error'
+                        : 'question-starter-code-hint'
+                    }
+                  >
+                    <StarterCodeEditor
+                      value={field.value}
+                      language={language}
+                      disabled={isSubmitting || created}
+                      onChange={field.onChange}
+                    />
+                  </div>
+                )}
               />
               <p id="question-starter-code-hint" className={styles.hint}>
                 Optional. Whitespace and indentation are preserved.

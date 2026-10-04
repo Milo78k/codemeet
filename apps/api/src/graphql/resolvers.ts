@@ -101,7 +101,13 @@ export const resolvers = {
     },
     async startInterview(_parent: unknown, args: ResolverArgs, context: ApiContext) {
       const user = await context.getCurrentUser();
-      return startInterview(context.prisma, user.id, args.interviewId);
+      const interview = await startInterview(context.prisma, user.id, args.interviewId);
+      context.publishSessionEvent({
+        type: 'INTERVIEW_STARTED',
+        interviewId: interview.id,
+        occurredAt: new Date().toISOString(),
+      });
+      return interview;
     },
     async finishInterview(_parent: unknown, args: ResolverArgs, context: ApiContext) {
       const user = await context.getCurrentUser();

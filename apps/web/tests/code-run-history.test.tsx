@@ -55,7 +55,7 @@ describe('code run history panel', () => {
     expect(screen.getByText(/Runtime error/)).toBeInTheDocument();
     expect(screen.getByText('Candidate')).toBeInTheDocument();
     expect(screen.getByText('19 ms')).toBeInTheDocument();
-    await user.click(screen.getByText('View run details'));
+    await user.click(screen.getByText('View details'));
     expect(screen.getByLabelText('Source snapshot')).toHaveTextContent(
       'const answer: number = 42;',
     );
