@@ -19,6 +19,7 @@ import {
   type QuestionRecord,
 } from '../services/question.service.js';
 import { listCodeRuns, recordCodeRun, type CodeRunRecord } from '../services/code-run.service.js';
+import { getInterviewResults } from '../services/interview-results.service.js';
 import {
   createGuestInvite,
   inspectGuestInvite,
@@ -53,6 +54,10 @@ export const resolvers = {
         return findCandidateInterview(context.prisma, identity.participant.id, args.id);
       }
       return findInterview(context.prisma, identity.user.id, args.id);
+    },
+    async interviewResults(_parent: unknown, args: ResolverArgs, context: ApiContext) {
+      const user = await context.getCurrentUser();
+      return getInterviewResults(context.prisma, user.id, args.id);
     },
     async codeRuns(_parent: unknown, args: ResolverArgs, context: ApiContext) {
       return listCodeRuns(context.prisma, await context.getIdentity(), args);
@@ -162,6 +167,16 @@ export const resolvers = {
     finishedAt: (interview: InterviewRecord) => interview.finishedAt?.toISOString() ?? null,
     createdAt: (interview: InterviewRecord) => interview.createdAt.toISOString(),
     updatedAt: (interview: InterviewRecord) => interview.updatedAt.toISOString(),
+  },
+  InterviewResults: {
+    startedAt: (results: { startedAt: Date | null }) => results.startedAt?.toISOString() ?? null,
+    finishedAt: (results: { finishedAt: Date | null }) => results.finishedAt?.toISOString() ?? null,
+  },
+  InterviewResultsRun: {
+    createdAt: (run: { createdAt: Date }) => run.createdAt.toISOString(),
+  },
+  InterviewTimelineEvent: {
+    createdAt: (event: { createdAt: Date }) => event.createdAt.toISOString(),
   },
   InterviewParticipant: {
     interviewId: (participant: InterviewRecord['participants'][number]) => participant.interviewId,

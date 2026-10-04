@@ -2,7 +2,7 @@
 
 ## Статус документа
 
-**PHASE 10 implementation complete; manual browser smoke pending.** The browser Worker still executes JavaScript and standalone TypeScript locally. After execution, the client reports the result through `recordCodeRun`; PostgreSQL stores a bounded immutable source snapshot and output, and the current `InterviewQuestion` has a read-only run history. A `CodeRun` result is client-reported, not a trusted judge verdict; the API never executes source. React TSX execution, durable Yjs persistence and interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md).
+**PHASE 11 implementation in progress; manual browser smoke pending.** PHASE 10's manual browser smoke passed. JavaScript and standalone TypeScript execute in a browser Worker; completed client-reported output is persisted as `CodeRun` history. The owner-only Results query uses persisted Interview, InterviewQuestion snapshots, participants, CodeRuns and key InterviewEvents. Results are descriptive records, not an automated score or trusted judge verdict. React TSX execution, durable Yjs persistence and production interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md), [phase-11-report.md](phase-11-report.md).
 
 ## Реализованный pipeline PHASE 2–7
 
@@ -25,7 +25,7 @@ flowchart LR
 
 SDL находится в `apps/api/src/graphql/schema.graphql`. Resolvers вызывают `question.service.ts` и `interview.service.ts`. Zod на границе сервисов проверяет строки, enum values, IDs, pagination и order; максимальный `limit` — 100. Сервисы отвечают за ownership, business validation и transactions. Prisma выполняет database access без дополнительного repository layer.
 
-Доступны queries `health`, `questions`, `question`, `interviews`, `interview`, `codeRuns` и mutations `createQuestion`, `updateQuestion`, `createInterview`, `addQuestionToInterview`, `setActiveQuestion`, `startInterview`, `finishInterview`, `recordCodeRun`. Tokens и notes имеют отдельные service/API contracts только при соответствующих фазах; CodeRun запись ограничена завершёнными результатами браузерного Worker.
+Доступны queries `health`, `questions`, `question`, `interviews`, `interview`, `interviewResults`, `codeRuns` и mutations `createQuestion`, `updateQuestion`, `createInterview`, `addQuestionToInterview`, `setActiveQuestion`, `startInterview`, `finishInterview`, `recordCodeRun`. Tokens и notes имеют отдельные service/API contracts только при соответствующих фазах; CodeRun запись ограничена завершёнными результатами браузерного Worker.
 
 ## Frontend PHASE 2–7
 
@@ -47,6 +47,7 @@ Routes остаются короткими Server Components, а domain UI на�
 | `/interviews/new`          | Создание интервью после submit и последовательное attachment выбранных задач               |
 | `/interviews/[id]`         | Summary, прикреплённые задачи и server status; Start/Finish actions                        |
 | `/interviews/[id]/session` | Рабочее пространство IN_PROGRESS: snapshot content, active question и подтверждение Finish |
+| `/interviews/[id]/results` | Owner-only persisted summary, question runs и timeline после Finish                        |
 
 Summary не содержит Interview Room, редактора, realtime или execution. Status берётся из backend enum. Общий небольшой error helper преобразует Apollo/GraphQL ошибки в сообщения, сохраняя controlled validation/state errors и скрывая database internals.
 
@@ -456,6 +457,24 @@ Output for the just-completed Run stays in local React state and is shown before
 
 Sandpack offers an integrated editor-independent live JavaScript/Node preview and supports a richer React project workflow, but introduces a larger runtime/bundler integration than a single-snippet runner needs. [Sandpack](https://sandpack.codesandbox.io/). WebContainers provide an in-browser Node.js filesystem/process environment; they require SharedArrayBuffer/cross-origin isolation, impose browser support constraints and may need a commercial API license. [WebContainers browser support](https://developer.stackblitz.com/platform/webcontainers/browser-support), [WebContainer API FAQ](https://developer.stackblitz.com/guides/user-guide/general-faqs). A first-party Worker is smaller and needs no external service or new package, and its termination API directly meets the infinite-loop requirement. Its narrower language support is why this phase does not claim React TSX execution.
 
+## Interview Results — PHASE 11
+
+После `FINISHED` interviewer получает отдельный `/interviews/[id]/results` route и явный View results CTA на interview overview/session. Query `interviewResults(id)` проверяет interviewer identity и `createdById` на backend до загрузки snapshots или source. Чужое интервью отвечает `NOT_FOUND`; candidate identity получает `FORBIDDEN`. Для `DRAFT`, `READY` и `IN_PROGRESS` query возвращает `available: false` и не читает code snapshots.
+
+Результат вычисляется из существующих таблиц без новой migration или ResultsSnapshot. В Repeatable Read транзакции сервис читает интервью, ordered `InterviewQuestion` snapshots и участников. Для завершённой сессии run counts и max `createdAt` вычисляются сгруппированно; ещё одна grouped query выбирает lexicographically greatest run ID только среди rows с этим max timestamp, после чего загружаются сами latest runs. Число запросов не растёт с количеством вопросов, а вся run history остаётся paginated и загружается отдельно при раскрытии карточки.
+
+Duration вычисляется только из сохранённых `startedAt` и `finishedAt`; если любой timestamp отсутствует или порядок некорректен, UI показывает, что duration unavailable. Question title/language/difficulty берутся из attachment snapshot, reusable Question не используется для истории. Timeline выводит только persisted `INTERVIEW_STARTED`, `QUESTION_CHANGED`, `CANDIDATE_JOINED` и `INTERVIEW_FINISHED`; события ограничены последними 100 и отображаются в хронологическом порядке. `INTERVIEW_CREATED` и `CODE_RUN` не добавляются синтетически, потому что это не key activity в текущем event writer.
+
+```mermaid
+flowchart TD
+  Finished["FINISHED Interview"] --> ResultsQuery["GraphQL interviewResults"]
+  ResultsQuery --> Store["Interview + InterviewQuestion snapshots<br/>Participants + CodeRuns + InterviewEvents"]
+  Store --> ResultsUI["Owner-only Results UI"]
+  ResultsUI -->|"expand question"| PagedHistory["Paginated codeRuns query"]
+```
+
+The Results UI needs no previous Apollo session cache and no Yjs, Awareness, Session Events, polling or browser Worker connection. Hard refresh loads the same persisted data. Source, stdout and stderr are exposed only after backend owner authorization. Last `SUCCESS` is a browser-reported execution fact: there is no solved/best-run heuristic, scoring, AI review or trusted judge.
+
 ## Границы будущих фаз
 
 | Фаза | Следующий результат                                                                                      |
@@ -470,9 +489,9 @@ Sandpack offers an integrated editor-independent live JavaScript/Node preview an
 | 7    | Завершён: question-scoped presence, Awareness identity, remote cursors/selections и cleanup              |
 | 8    | Realtime Session Events                                                                                  |
 | 9    | Complete: CSP-restricted browser Code Runner; manual browser smoke passed                                |
-| 10   | Implemented: persisted CodeRun history; manual browser smoke pending                                     |
-| 11   | Private notes, timeline, finish sequencing и result page                                                 |
+| 10   | Implemented: persisted CodeRun history; manual browser smoke passed                                      |
+| 11   | Interview Results, snapshot summaries and timeline; manual browser smoke pending                         |
 | 12   | Дополнение уже созданных тестов: permissions, races, collaboration/reconnect, Apollo behavior            |
 | 13   | Docker, CI, окончательный README и проверка полного сценария MVP                                         |
 
-Проверки добавляются вместе с поведением. PHASE 10 добавляет DB-backed authorization/idempotency/pagination cases и frontend coverage для captured snapshots, execution statuses, save failure, read-only history и question scoping. DB-backed suites требуют PostgreSQL и используют выделенные временные test schemas. Durable Yjs persistence, private notes, interviewer authentication, trusted judging и replay остаются будущей работой. PHASE 7–9 manual browser smoke passed; PHASE 10 smoke awaits the user.
+Проверки добавляются вместе с поведением. PHASE 10 добавила DB-backed authorization/idempotency/pagination cases и frontend coverage для captured snapshots, execution statuses, save failure, read-only history и question scoping. PHASE 11 добавляет Results authorization, aggregation/timeline и frontend empty/error/refresh/history checks. DB-backed suites требуют PostgreSQL и используют выделенные временные test schemas. Durable Yjs persistence, private notes, production interviewer authentication, trusted judging и replay остаются будущей работой. PHASE 7–10 manual browser smoke passed; PHASE 11 smoke awaits manual review.

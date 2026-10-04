@@ -1,4 +1,6 @@
 import type { GetCodeRunsQuery } from '../../../shared/api/generated/graphql';
+import { formatDateTime, formatDuration } from '../../../shared/lib/format';
+import { RunOutput } from './RunOutput';
 
 import styles from '../../interviews/editor/editor.module.css';
 
@@ -47,30 +49,32 @@ export function CodeRunHistory({
               <HistoryItem key={run.id} run={run} />
             ))}
           </ol>
-          <div className={styles.historyPagination}>
-            <span className={styles.historyCount}>
-              {page.pageInfo.offset + 1}–{page.pageInfo.offset + page.items.length} of{' '}
-              {page.pageInfo.totalCount}
-            </span>
-            <div>
-              <button
-                type="button"
-                className={styles.historyRetry}
-                disabled={page.pageInfo.offset === 0 || loading}
-                onClick={onPrevious}
-              >
-                Newer
-              </button>
-              <button
-                type="button"
-                className={styles.historyRetry}
-                disabled={!page.pageInfo.hasNextPage || loading}
-                onClick={onNext}
-              >
-                Older
-              </button>
+          {(page.pageInfo.offset > 0 || page.pageInfo.hasNextPage) && (
+            <div className={styles.historyPagination}>
+              <span className={styles.historyCount}>
+                {page.pageInfo.offset + 1}–{page.pageInfo.offset + page.items.length} of{' '}
+                {page.pageInfo.totalCount}
+              </span>
+              <div>
+                <button
+                  type="button"
+                  className={styles.historyRetry}
+                  disabled={page.pageInfo.offset === 0 || loading}
+                  onClick={onPrevious}
+                >
+                  Newer
+                </button>
+                <button
+                  type="button"
+                  className={styles.historyRetry}
+                  disabled={!page.pageInfo.hasNextPage || loading}
+                  onClick={onNext}
+                >
+                  Older
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       ) : loading ? (
         <p role="status" className={styles.historyMessage}>
@@ -89,10 +93,7 @@ function HistoryItem({ run }: { run: CodeRunRow }) {
     RUNTIME_ERROR: { label: '✕ Runtime error', className: styles.historyFailure },
     TIMEOUT: { label: '⏱ Timeout', className: styles.historyTimeout },
   }[run.status];
-  const time = new Date(run.createdAt).toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const time = formatDateTime(run.createdAt, 'compact');
 
   return (
     <li className={styles.historyItem}>
@@ -101,9 +102,7 @@ function HistoryItem({ run }: { run: CodeRunRow }) {
           {time}
         </time>
         <span className={status.className}>{status.label}</span>
-        <span className={styles.historyDuration}>
-          {run.durationMs === null ? '—' : `${run.durationMs} ms`}
-        </span>
+        <span className={styles.historyDuration}>{formatDuration(run.durationMs)}</span>
         {run.createdByParticipant && (
           <span className={styles.historyAuthor}>{run.createdByParticipant.displayName}</span>
         )}
@@ -113,10 +112,7 @@ function HistoryItem({ run }: { run: CodeRunRow }) {
         <div className={styles.historyDetailBody}>
           <h4>Source snapshot</h4>
           <pre aria-label="Source snapshot">{run.sourceSnapshot}</pre>
-          <h4>stdout</h4>
-          <pre aria-label="Run stdout">{run.stdout || 'No stdout.'}</pre>
-          <h4>stderr</h4>
-          <pre aria-label="Run stderr">{run.stderr || 'No stderr.'}</pre>
+          <RunOutput stdout={run.stdout ?? ''} stderr={run.stderr ?? ''} />
         </div>
       </details>
     </li>

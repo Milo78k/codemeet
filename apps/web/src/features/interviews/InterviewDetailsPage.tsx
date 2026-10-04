@@ -56,6 +56,12 @@ export function InterviewDetailsPage({ interviewId }: { interviewId: string }) {
                   <Icon name="arrow" />
                 </Link>
               )}
+              {interview.status === 'FINISHED' && interview.createdBy && (
+                <Link href={`/interviews/${interview.id}/results`} className={styles.primaryButton}>
+                  View results
+                  <Icon name="arrow" />
+                </Link>
+              )}
               {interview.createdBy && <InterviewActions interview={interview} />}
             </div>
           </div>

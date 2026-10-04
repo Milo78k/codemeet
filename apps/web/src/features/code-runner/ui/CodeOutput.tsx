@@ -1,5 +1,6 @@
 import { isCodeRunnerLanguageSupported, type CodeExecutionResult } from '../model/execution';
 import type { CodeRunnerViewState } from '../useCodeRunner';
+import { RunOutput } from './RunOutput';
 
 import styles from '../../interviews/editor/editor.module.css';
 
@@ -63,7 +64,7 @@ function ExecutionOutput({
 
   return (
     <section className={styles.outputPanel} aria-label="Code output">
-      <h3 className={styles.outputTitle}>Output</h3>
+      <h3 className={styles.outputTitle}>Run result</h3>
       <p
         role={result.status === 'runtime_error' ? 'alert' : 'status'}
         className={
@@ -77,26 +78,7 @@ function ExecutionOutput({
         {result.status === 'success' ? '✓ ' : result.status === 'timeout' ? '⏱ ' : ''}
         {statusText}
       </p>
-      {result.entries.length > 0 ? (
-        <ol className={styles.outputEntries} aria-label="Execution logs">
-          {result.entries.map((entry, index) => (
-            <li
-              key={`${result.runId}-${index}`}
-              className={
-                entry.level === 'error' || entry.level === 'warn'
-                  ? styles.outputError
-                  : styles.outputEntry
-              }
-            >
-              {entry.message || '\u00a0'}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className={styles.outputNotice}>
-          {result.status === 'success' ? 'No console output.' : result.stderr.join('\n')}
-        </p>
-      )}
+      <RunOutput stdout={result.stdout.join('\n')} stderr={result.stderr.join('\n')} />
       {historySaveStatus && (
         <p
           role={historySaveStatus === 'failed' ? 'alert' : 'status'}

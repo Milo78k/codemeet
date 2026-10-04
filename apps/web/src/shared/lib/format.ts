@@ -29,3 +29,43 @@ export function formatDate(value: string) {
     timeZone: 'UTC',
   }).format(date);
 }
+
+export function formatDateTime(
+  value: string | null | undefined,
+  style: 'full' | 'compact' = 'full',
+) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const options: Intl.DateTimeFormatOptions =
+    style === 'compact'
+      ? {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          fractionalSecondDigits: 3,
+          hourCycle: 'h23',
+        }
+      : { dateStyle: 'medium', timeStyle: 'medium' };
+  return new Intl.DateTimeFormat(undefined, options).format(date);
+}
+
+export function formatDuration(durationMs: number | null | undefined) {
+  if (
+    durationMs === null ||
+    durationMs === undefined ||
+    !Number.isFinite(durationMs) ||
+    durationMs < 0
+  ) {
+    return '—';
+  }
+  if (durationMs < 1_000) return `${Math.round(durationMs)} ms`;
+
+  const totalSeconds = Math.floor(durationMs / 1_000);
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, '0')} min`;
+  return minutes > 0 ? `${minutes} min ${seconds} sec` : `${seconds} sec`;
+}
