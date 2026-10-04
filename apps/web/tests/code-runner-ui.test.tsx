@@ -88,7 +88,10 @@ describe('code runner editor controls', () => {
       worker?.complete();
     });
     expect(await screen.findByText('✓ Completed · 12 ms')).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Execution logs' })).toHaveTextContent('hello');
+    expect(
+      within(screen.getByLabelText('Code output')).getByRole('region', { name: 'Output' }),
+    ).toHaveTextContent('hello');
+    expect(screen.getByRole('region', { name: 'Output' })).toHaveTextContent('hello');
 
     await user.click(screen.getByRole('button', { name: 'Run' }));
     expect(TestCodeRunnerWorker.instances[1]?.request?.source).toBe('console.log("next snapshot")');
@@ -105,7 +108,7 @@ describe('code runner editor controls', () => {
     expect(TestCodeRunnerWorker.instances).toHaveLength(0);
   });
 
-  test('shows runtime errors in Output and does not expose an uncaught application error', async () => {
+  test('shows runtime errors in Errors without duplicating them in Output', async () => {
     const user = userEvent.setup();
     renderWithApi(<Editor />);
     await screen.findByRole('textbox', { name: 'Code editor' });
@@ -115,9 +118,10 @@ describe('code runner editor controls', () => {
     act(() => worker?.complete('runtime_error', 'ReferenceError: boom'));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Runtime error · 12 ms');
-    expect(screen.getByRole('list', { name: 'Execution logs' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Errors' })).toHaveTextContent(
       'ReferenceError: boom',
     );
+    expect(screen.queryByRole('region', { name: 'Output' })).not.toBeInTheDocument();
     expect(screen.queryByRole('alert', { name: /application/i })).not.toBeInTheDocument();
   });
 
@@ -197,6 +201,7 @@ describe('code runner editor controls', () => {
     act(() => TestCodeRunnerWorker.instances[0]?.complete());
 
     expect(await screen.findByText('✓ Completed · 12 ms')).toBeInTheDocument();
+    expect(screen.getByText('No output.')).toBeInTheDocument();
     expect(await screen.findByText(/Run history could not be saved/)).toBeInTheDocument();
     expect(screen.queryByText(/Runtime error ·/)).not.toBeInTheDocument();
   });
@@ -303,9 +308,35 @@ describe('code runner editor controls', () => {
     );
 
     expect(screen.getByRole('status')).toHaveTextContent('Execution timed out · 5000 ms');
-    expect(screen.getByRole('list', { name: 'Execution logs' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Errors' })).toHaveTextContent(
       'Execution timed out after 5 seconds.',
     );
+  });
+
+  test('renders successful code without console output as a single empty state', () => {
+    render(
+      <CodeOutput
+        language="JAVASCRIPT"
+        state={{
+          status: 'complete',
+          result: {
+            runId: 'empty-run',
+            interviewQuestionId: 'question-a',
+            status: 'success',
+            entries: [],
+            stdout: [],
+            stderr: [],
+            durationMs: 1,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('No output.')).toBeInTheDocument();
+    expect(screen.queryByText('No stdout.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No stderr.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Output' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Errors' })).not.toBeInTheDocument();
   });
 
   test('cancels an active execution when the question changes or the editor becomes unavailable', async () => {

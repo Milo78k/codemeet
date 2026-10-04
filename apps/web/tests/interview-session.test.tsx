@@ -260,16 +260,49 @@ describe('interview session', () => {
     },
   );
 
-  test('FINISHED shows a controlled finished state without session controls', async () => {
+  test('FINISHED gives the interviewer a results link and removes session controls', async () => {
     server.use(currentInterviewHandler(sessionInterview('FINISHED')));
     renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
     expect(await screen.findByText('Interview is finished')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /View result|Back to interview/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'View results' })).toHaveAttribute(
       'href',
-      `/interviews/${interviewId}`,
+      `/interviews/${interviewId}/results`,
     );
     expect(screen.queryByRole('button', { name: 'Finish interview' })).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Questions' })).not.toBeInTheDocument();
+  });
+
+  test('finished interviewer overview exposes the View results call to action', async () => {
+    server.use(currentInterviewHandler(sessionInterview('FINISHED')));
+    renderWithApi(<InterviewDetailsPage interviewId={interviewId} />);
+    expect(await screen.findByRole('link', { name: 'View results' })).toHaveAttribute(
+      'href',
+      `/interviews/${interviewId}/results`,
+    );
+  });
+
+  test('FINISHED candidate state does not expose the interviewer results route', async () => {
+    const finished = sessionInterview('FINISHED', { createdBy: null });
+    server.use(
+      currentInterviewHandler(finished),
+      api.query('GetCurrentParticipant', () =>
+        HttpResponse.json({
+          data: {
+            currentParticipant: {
+              __typename: 'InterviewParticipant',
+              id: 'candidate-finished',
+              interviewId,
+              displayName: 'Candidate',
+              role: 'CANDIDATE',
+              joinedAt: '2026-10-02T10:00:00.000Z',
+            },
+          },
+        }),
+      ),
+    );
+    renderWithApi(<InterviewSessionPage interviewId={interviewId} />);
+    expect(await screen.findByText('The interviewer has ended the session.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'View results' })).not.toBeInTheDocument();
   });
 
   test('missing interview shows a controlled state', async () => {

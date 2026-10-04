@@ -340,23 +340,36 @@
   color: #236e53;
   font-weight: 650;
 }
-.outputFailure,
-.outputError {
+.outputFailure {
   color: #a3362a;
 }
-.outputEntries {
+.runOutputContent,
+.runOutputSection {
   display: grid;
-  gap: 3px;
-  padding: 0;
-  margin: 8px 0 0;
-  list-style: none;
+  gap: 5px;
+}
+.runOutputContent {
+  margin-top: 8px;
+}
+.runOutputHeading {
+  margin: 0;
+  color: #354333;
+  font-size: 12px;
+  font-weight: 700;
+}
+.runOutputText {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px;
+  background: #f7f8f5;
+  color: #26352b;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
   font-size: 12px;
-}
-.outputEntry {
-  color: #26352b;
 }
 
 .historyPanel {

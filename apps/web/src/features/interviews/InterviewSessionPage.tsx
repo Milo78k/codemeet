@@ -145,7 +145,14 @@ export function InterviewSessionPage({ interviewId }: { interviewId: string }) {
   if (interview.status === 'FINISHED')
     return (
       <EmptyState title="Interview is finished">
-        The session has ended. <Link href={`/interviews/${interview.id}`}>View result</Link>.
+        {candidate ? (
+          'The interviewer has ended the session.'
+        ) : (
+          <>
+            The session has ended.{' '}
+            <Link href={`/interviews/${interview.id}/results`}>View results</Link>.
+          </>
+        )}
       </EmptyState>
     );
 

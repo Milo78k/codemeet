@@ -28,6 +28,13 @@ enum CodeRunStatus {
   TIMEOUT
 }
 
+enum InterviewTimelineEventType {
+  INTERVIEW_STARTED
+  QUESTION_CHANGED
+  CANDIDATE_JOINED
+  INTERVIEW_FINISHED
+}
+
 type User {
   id: ID!
   name: String!
@@ -146,6 +153,52 @@ type CodeRunPage {
   pageInfo: PageInfo!
 }
 
+type InterviewResultsRun {
+  id: ID!
+  status: CodeRunStatus!
+  sourceSnapshot: String!
+  stdout: String!
+  stderr: String!
+  durationMs: Int
+  createdAt: String!
+}
+
+type InterviewQuestionResult {
+  interviewQuestionId: ID!
+  order: Int!
+  snapshotTitle: String
+  snapshotLanguage: ProgrammingLanguage
+  snapshotDifficulty: QuestionDifficulty
+  runCount: Int!
+  lastRun: InterviewResultsRun
+}
+
+type InterviewTimelineEvent {
+  id: ID!
+  type: InterviewTimelineEventType!
+  createdAt: String!
+  questionTitle: String
+  previousQuestionTitle: String
+  participantName: String
+}
+
+type InterviewResults {
+  id: ID!
+  title: String!
+  status: InterviewStatus!
+  available: Boolean!
+  startedAt: String
+  finishedAt: String
+  durationMs: Int
+  candidateName: String
+  interviewerName: String!
+  totalQuestions: Int!
+  totalRuns: Int!
+  questions: [InterviewQuestionResult!]!
+  timeline: [InterviewTimelineEvent!]!
+  hasMoreTimelineEvents: Boolean!
+}
+
 input CreateQuestionInput {
   title: String!
   description: String!
@@ -191,6 +244,7 @@ type Query {
   question(id: ID!): Question
   interviews(status: InterviewStatus, limit: Int = 20, offset: Int = 0): InterviewPage!
   interview(id: ID!): Interview
+  interviewResults(id: ID!): InterviewResults!
   codeRuns(
     interviewId: ID!
     interviewQuestionId: ID!

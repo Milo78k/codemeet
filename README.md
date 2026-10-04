@@ -6,7 +6,7 @@ CodeMeet — fullstack pet-project для технических интервь�
 
 ## Текущий этап
 
-**PHASE 10 — Code Run History — implementation complete; manual browser smoke pending.** JavaScript and TypeScript run from an immutable snapshot of the current collaborative Monaco model in a separate browser Worker. Completed client-reported results are saved through GraphQL and shown in a read-only history for the current interview question. A saved result is not a trusted judge verdict, and the API never executes user code. See the [PHASE 10 report](docs/phase-10-report.md) for the smoke flow and verification status.
+**PHASE 11 — Interview Results — implementation in progress; manual browser smoke pending.** Finished interviews have an owner-only Results page built from persisted interview snapshots, participants, code runs and key events. It reuses PHASE 10's paginated run history. Results describe recorded session facts; they do not score candidates or validate code. PHASE 10's manual browser smoke passed. See the [PHASE 11 report](docs/phase-11-report.md) for implementation and verification status.
 
 В репозитории настроены pnpm, Turborepo, TypeScript strict, ESLint и Prettier. Будущие библиотеки устанавливаются тогда, когда для них появляется функциональность.
 
@@ -17,7 +17,7 @@ CodeMeet — fullstack pet-project для технических интервь�
 - Monaco Editor с JavaScript, TypeScript и React/TSX; Yjs collaboration и remote cursors.
 - Presence, reconnect и синхронизация документов после краткого отключения.
 - JavaScript/TypeScript browser execution, локальный console output и persisted read-only run history; React TSX preview ещё не реализован.
-- Приватные заметки с backend authorization; итоговая страница с snapshots, runs и timeline.
+- Итоговая страница завершённого интервью с snapshots, runs и timeline; private notes остаются будущей работой.
 
 Эти пункты являются roadmap, а не уже доступными функциями.
 
@@ -221,7 +221,7 @@ pnpm dev
 
 Web: <http://localhost:3000>. Health: <http://127.0.0.1:4000/health>. GraphQL: <http://127.0.0.1:4000/graphql>. GraphiQL доступен в development.
 
-Web pages: `/dashboard`, `/questions`, `/questions/new`, `/interviews/new`, `/interviews/<id>` и `/interviews/<id>/session`. Summary показывает сведения об интервью и status actions; session содержит условие и Monaco Editor. Данные загружаются через Apollo в браузере. Ссылка `/` открывает dashboard.
+Web pages: `/dashboard`, `/questions`, `/questions/new`, `/interviews/new`, `/interviews/<id>`, `/interviews/<id>/session` и `/interviews/<id>/results`. Interview overview показывает status actions и ссылку View results после Finish; Results восстанавливается из GraphQL/PostgreSQL после hard refresh. Session содержит условие и Monaco Editor. Данные загружаются через Apollo в браузере. Ссылка `/` открывает dashboard.
 
 Compose публикует PostgreSQL только на `127.0.0.1`, использует named volume и healthcheck. Образ `postgres:17-alpine` сохраняет major version и получает обновления minor releases. Init SQL создаёт отдельную БД `codemeet_test` при первом запуске нового volume. Если volume уже существовал, создайте test database отдельно:
 
@@ -447,6 +447,20 @@ flowchart LR
 
 Это browser sandbox boundary для защиты UI/API от зависшего или случайно вредного сниппета, а не гарантия изоляции hostile code. Worker не получает application closures, DOM, токены или Apollo state; CSP блокирует сетевые подключения и nested workers. У приложения нет жёсткого контроля над памятью браузера и гарантий против browser-engine vulnerabilities. Подробные trade-offs и limitations: [docs/architecture.md](docs/architecture.md) и [docs/phase-9-report.md](docs/phase-9-report.md).
 
+## Interview Results — PHASE 11
+
+После Finish interviewer открывает `/interviews/<id>/results`. Один `interviewResults(id)` GraphQL query возвращает summary, participant names, persisted timestamps, упорядоченные snapshots вопросов, run counts/latest runs и ограниченный timeline. Migration не нужна: производные агрегаты вычисляются при чтении. Backend разрешает Results только владельцу-interviewer; candidate не может запросить interviewer-only данные.
+
+```mermaid
+flowchart TD
+  Finished["FINISHED Interview"] --> Query["GraphQL interviewResults"]
+  Query --> Persisted["Interview + InterviewQuestion snapshots<br/>Participants + CodeRuns + InterviewEvents"]
+  Persisted --> Results["Owner-only Results UI"]
+  Results -->|"expand question"| History["Paginated codeRuns query"]
+```
+
+Полная история загружается только при раскрытии вопроса через pagination PHASE 10. Results работают после hard refresh и не используют Yjs, Awareness, Session Events, polling или Worker. Они описывают сохранённые события и browser-reported runs, не оценивая кандидата и не подтверждая корректность решения.
+
 ## Проверки и testing
 
 ```sh
@@ -460,7 +474,7 @@ pnpm build
 
 `pnpm check` объединяет format, Codegen check, lint и typecheck. ESLint запрещает default exports в обычном коде; исключения — entry points, где framework/tool требует default export. TypeScript включает `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` и `noImplicitOverride`. Web typecheck проверяет Codegen и генерирует Next route types, поэтому работает и до первой сборки.
 
-Тесты добавляются вместе с поведением. PHASE 10 добавляет DB-backed authorization/idempotency/pagination cases и Apollo/UI tests для разделения Output и persisted history. Критические ошибки останавливают переход к следующей фазе.
+Тесты добавляются вместе с поведением. PHASE 10 добавила DB-backed authorization/idempotency/pagination cases и Apollo/UI tests для разделения Output и persisted history. PHASE 11 добавляет DB-backed owner/participant authorization, aggregation/timeline и Results UI tests. Критические ошибки останавливают переход к следующей фазе.
 
 В PHASE 1 добавлены Jest integration tests настоящего API + PostgreSQL. Выполните `pnpm test` после настройки `TEST_DATABASE_URL`; root task сначала собирает необходимые workspace packages. Тесты не мокают Prisma и не используют developer public schema: создают случайную `cm_test_<uuid>` в отдельной `_test` database, применяют сохранённую migration, выполняют seed и после suite удаляют только собственную schema. При setup error тоже выполняется cleanup. Jest использует compiled ESM без TS transformer и требует Node `--experimental-vm-modules`.
 
@@ -489,7 +503,8 @@ PHASE 4 добавляет domain/model lifecycle tests и session editor behavi
 - [x] [Finish confirmation](docs/screenshots/session-finish-confirmation.png).
 - [x] [Finished summary](docs/screenshots/session-finished-summary.png).
 - [ ] Interview Room: desktop light/dark и mobile panels после PHASE 5–7.
-- [ ] Interview Result: snapshots, notes и timeline после PHASE 11.
+- [x] Interview Results: snapshots, run history и timeline.
+- [ ] Private interview notes с backend authorization.
 
 ## Roadmap
 
@@ -505,11 +520,11 @@ PHASE 4 добавляет domain/model lifecycle tests и session editor behavi
 | 7    | Question-scoped presence, Awareness, remote cursors и selections    | Реализовано                       |
 | 8    | Realtime Session Events                                             | Реализовано                       |
 | 9    | Browser Code Runner для JavaScript/TypeScript                       | Реализовано                       |
-| 10   | Persisted CodeRun history scoped to InterviewQuestion               | Реализовано; manual smoke pending |
-| 11   | Private notes, timeline и result page                               | Запланировано                     |
+| 10   | Persisted CodeRun history scoped to InterviewQuestion               | Реализовано; manual smoke passed  |
+| 11   | Interview Results, snapshots, run summaries и timeline              | Реализуется; manual smoke pending |
 | 12   | Расширение permissions/race/realtime regression tests               | Запланировано                     |
 | 13   | Docker Compose, GitHub Actions и MVP verification                   | Запланировано                     |
 
 Docker Compose сейчас поднимает только PostgreSQL. CI и Docker images web/api остаются для PHASE 13. За пределами MVP: видео/аудио, AI scoring, ATS, платежи, email, mobile IDE, другие runtime languages, Kubernetes, полный character replay и whiteboard.
 
-PHASE 7–9 browser smoke пройдены; PHASE 10 implementation checks are recorded and its manual smoke is pending. Ограничения текущего MVP: TEMP DEMO AUTH остаётся общим interviewer principal; Y.Doc теряется при restart API; Code Runner исполняет один файл без внешних пакетов, а React TSX preview и trusted judge отложены. PHASE 9 and 10 details: [PHASE 9 report](docs/phase-9-report.md), [PHASE 10 report](docs/phase-10-report.md).
+PHASE 7–10 browser smoke пройдены; PHASE 11 browser smoke ожидает ручной проверки. Ограничения текущего MVP: TEMP DEMO AUTH остаётся общим interviewer principal; Y.Doc теряется при restart API; Code Runner исполняет один файл без внешних пакетов, React TSX preview и trusted judge отложены. [PHASE 9](docs/phase-9-report.md), [PHASE 10](docs/phase-10-report.md) и [PHASE 11](docs/phase-11-report.md) reports содержат подробности.

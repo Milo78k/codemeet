@@ -1,0 +1,41 @@
+query GetInterviewResults($id: ID!) {
+  interviewResults(id: $id) {
+    id
+    title
+    status
+    available
+    startedAt
+    finishedAt
+    durationMs
+    candidateName
+    interviewerName
+    totalQuestions
+    totalRuns
+    hasMoreTimelineEvents
+    questions {
+      interviewQuestionId
+      order
+      snapshotTitle
+      snapshotLanguage
+      snapshotDifficulty
+      runCount
+      lastRun {
+        id
+        status
+        sourceSnapshot
+        stdout
+        stderr
+        durationMs
+        createdAt
+      }
+    }
+    timeline {
+      id
+      type
+      createdAt
+      questionTitle
+      previousQuestionTitle
+      participantName
+    }
+  }
+}
