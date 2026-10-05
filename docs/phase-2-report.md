@@ -161,11 +161,3 @@ Screenshots просмотрены после capture: [dashboard](screenshots/d
 По отдельному заданию: Question details/editing UI с уже generated GetQuestion/UpdateQuestion, улучшение library UX и cache invalidation для editing. Dashboard/forms из расширенного задания PHASE 2 уже реализованы и не требуют повторного создания в следующей фазе.
 
 Auth/guest flow, Interview Room, Monaco, WebSocket, Yjs, presence и code execution относятся к последующим фазам. Ничего из этого не начато. Работа останавливается после PHASE 2.
-
-## 14. Пять вопросов технического интервьюера
-
-1. Почему normalized cache обновляет Interview после mutation, но не может автоматически исправить membership, порядок и totalCount всех filtered lists?
-2. Как keyArgs, merge и read работают вместе при offset pagination? Почему offset нельзя считать по длине дедуплицированного списка?
-3. Как TypedDocumentNode связывает SDL, operation variables/result и Apollo hook? Где CI обнаружит несовместимое поле или stale generated artifact?
-4. Почему `use client` само по себе не выключает server render и как изменятся provider/cache lifetime при переходе на Apollo Next.js integration с SSR?
-5. Как восстановить create-and-attach workflow после потерянного mutation response, не создавая дубликат интервью? Какие гарантии дают reconciliation, idempotency key и atomic mutation?

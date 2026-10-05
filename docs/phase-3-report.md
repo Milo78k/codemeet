@@ -189,11 +189,3 @@ Screenshots: [desktop](screenshots/session-desktop.png), [tablet](screenshots/se
 Только по отдельному заданию: настоящая auth/guest flow, дальнейшие library UX/details/editing, отдельный result route с runs/notes/timeline и специализированные editor/realtime фазы. Snapshot content уже готов быть источником начального code document, но CodeDocument/Monaco/Yjs implementation не добавлялась.
 
 Monaco, WebSocket, Yjs, presence, guest join, Auth.js, runner/Sandpack/WebContainers и collaborative editing не начаты. PHASE 3 завершает работу этого запроса. Commit и push не выполнялись.
-
-## 17. Пять вопросов технического интервьюера
-
-1. Почему reusable Question и InterviewQuestion snapshot должны быть разными records? Чем отличается захват при Add от захвата в атомарной Start transaction?
-2. Как migration с nullable snapshots сохраняет legacy history честно, и почему SQL all-or-none CHECK не эквивалентен запрету administrative snapshot rewrite?
-3. Какие guarantees дают Serializable retry, conditional status update и composite membership FK при concurrent Add/Start/SetActive? Как проверить event rollback без mock Prisma?
-4. Почему mutation response нормализует active question без refetch, но UpdateQuestion не переписывает исторический контент? Как Codegen сохраняет nullable snapshot contract до React rendering?
-5. Как pending/ref guard и server lifecycle checks защищают rapid actions? Что изменится при optimisticResponse, rollback и будущих external/realtime updates?

@@ -2,7 +2,7 @@
 
 ## Статус документа
 
-**PHASE 0–11 are complete. PHASE 12 is final documentation, consistency and portfolio-readiness polish; manual final verification remains required.** JavaScript and standalone TypeScript execute in a browser Worker; completed client-reported output is persisted as `CodeRun` history. The owner-only Results query uses persisted Interview, InterviewQuestion snapshots, participants, CodeRuns and key InterviewEvents. Results are descriptive records, not an automated score or trusted judge verdict. React TSX execution, durable Yjs persistence, multi-replica realtime and production interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md), [phase-11-report.md](phase-11-report.md) and [phase-12-report.md](phase-12-report.md).
+**PHASE 0–12 are complete.** JavaScript and standalone TypeScript execute in a browser Worker; completed client-reported output is persisted as `CodeRun` history. The owner-only Results query uses persisted Interview, InterviewQuestion snapshots, participants, CodeRuns and key InterviewEvents. Results are descriptive records, not an automated score or trusted judge verdict. React TSX execution, durable Yjs persistence, multi-replica realtime and production interviewer authentication are not implemented. Reports: [phase-5-report.md](phase-5-report.md), [phase-6-report.md](phase-6-report.md), [phase-7-report.md](phase-7-report.md), [phase-8-report.md](phase-8-report.md), [phase-9-report.md](phase-9-report.md), [phase-10-report.md](phase-10-report.md), [phase-11-report.md](phase-11-report.md) and [phase-12-report.md](phase-12-report.md).
 
 ## Architecture summary
 
@@ -496,7 +496,7 @@ The Results UI needs no previous Apollo session cache and no Yjs, Awareness, Ses
 | 5–8  | Завершены: Yjs collaboration, guest access, Awareness presence и realtime Session Events.                 |
 | 9–10 | Завершены: browser Worker runner и persisted client-reported CodeRun history.                             |
 | 11   | Завершена: owner-only descriptive Results, frozen question summaries, run history и timeline.             |
-| 12   | Final portfolio-readiness polish; manual final verification is required.                                  |
+| 12   | Final documentation and consistency polish; automated and manual verification passed.                     |
 
 DB-backed suites требуют PostgreSQL и используют отдельные временные test schemas. PHASE 9–11 reports фиксируют автоматические и ручные проверки соответствующих фаз. Future work включает durable Yjs persistence, private notes, production interviewer authentication, trusted judging, replay и multi-replica realtime; это не реализованные возможности.
 

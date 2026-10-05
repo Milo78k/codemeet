@@ -83,11 +83,3 @@ Frontend WebSocket adapter не сообщает y-websocket об `open` до ac
 ## Технический долг и следующая фаза
 
 Для production остаются настоящий interviewer authentication, более строгая credential delivery strategy, управление revoke/expiry активных соединений и persistence Yjs documents. Необходимы запуск migration и DB-backed integration suite на PostgreSQL. Это report перечисляет возможные следующие работы; PHASE 7 в рамках этой задачи не начиналась. Awareness UI/live cursors и CodeRunner также не реализовывались.
-
-## Пять вопросов на интервью
-
-1. Как одноразовая ссылка защищена от replay при двух параллельных запросах на join?
-2. Почему база хранит hash invite/session tokens, а не сами bearer secrets?
-3. Как сервер отличает authentication/identity от authorization доступа к interview и room?
-4. Почему candidate credential хранится в `sessionStorage`, и какие риски это оставляет?
-5. Как WebSocket может проверить identity до Yjs sync, не отправляя секрет в URL?

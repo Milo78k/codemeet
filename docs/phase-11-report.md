@@ -133,12 +133,4 @@ Candidate denial was verified through the API integration flow, not a second bro
 
 ## 18. State when PHASE 11 closed
 
-At PHASE 11 close, private interviewer notes with server-side ownership and authorization remained future work. PHASE 12 is the final portfolio-readiness polish; it does not add private notes or other large product capabilities.
-
-## 19. Technical interviewer questions
-
-1. Why are result counts and latest runs derived from persisted rows instead of stored in a ResultsSnapshot?
-2. How does the two-stage grouped query choose one deterministic latest run per question without loading full history?
-3. Why does `InterviewQuestion` snapshot data take precedence over current reusable `Question` content?
-4. Why is a browser-reported `SUCCESS` not evidence that a candidate solved the problem?
-5. Which authorization checks prevent candidates and other interview owners from reading source snapshots?
+At PHASE 11 close, private interviewer notes with server-side ownership and authorization remained future work. PHASE 12 is the final polish phase; it does not add private notes or other large product capabilities.
