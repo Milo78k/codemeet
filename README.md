@@ -1,5 +1,9 @@
 # CodeMeet
 
+**Collaborative technical interviews with a shared Monaco editor, guest invites and persisted run history.**
+
+**Explore:** [Architecture](docs/architecture.md) · [Verification report](docs/phase-12-report.md)
+
 CodeMeet is a web app for running technical interviews. An interviewer selects reusable coding questions, invites a candidate, and works with them in a shared editor. After the session, the interviewer can review persisted run history and a descriptive interview summary.
 
 The project explores the product and architecture problems behind collaborative interviews: keeping business state separate from shared code, controlling guest access, making reconnects converge, and recording useful history without pretending that browser execution is a trusted judge.
@@ -138,4 +142,4 @@ These points describe implemented behavior; they do not imply production authent
 
 ## Status and reports
 
-PHASE 0–11 are complete. PHASE 12 is the final portfolio-readiness polish; its final browser verification remains a manual step. The implementation and check results for each phase are recorded in [`docs/phase-12-report.md`](docs/phase-12-report.md) and the linked historical phase reports.
+PHASE 0–12 are complete. The PHASE 12 report records final manual smoke verification as PASS. The implementation and check results for each phase are recorded in [`docs/phase-12-report.md`](docs/phase-12-report.md) and the linked historical phase reports.
