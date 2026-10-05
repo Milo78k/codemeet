@@ -124,11 +124,3 @@ Internal `onEditorReady({ editor, monaco, model })` возвращает optiona
 Drafts существуют только в текущем mounted workspace. Full refresh, уход из Session и Finish могут уничтожить edits; backend code не сохраняется, UI прямо предупреждает об этом. FINISHED Session не монтирует editor. Toolbar содержит только language, Modified/Unmodified и Reset.
 
 Код редактируется и не исполняется. Application не добавляет eval/new Function, script injection, iframe execution или runner. WebSocket, Yjs, awareness, presence, subscriptions, save mutations, Auth/guest flow, Sandpack/WebContainers и CodeRunner не реализованы. Работа заканчивается PHASE 4.
-
-## 17. Пять вопросов технического интервьюера
-
-1. Почему editor draft идентифицируется InterviewQuestion attachment ID, а business active question — source Question ID? Какие проблемы возникнут при одном глобальном text value?
-2. Как `keepCurrentModel`, workspace ownership и generation-checked microtask cleanup сохраняют drafts/undo в StrictMode, одновременно освобождая модели после final unmount?
-3. Почему Reset реализован подтверждённым `model.setValue`, а initial snapshot применяется только при создании? Как отличить пустой starter code от missing snapshot?
-4. Зачем workers собираются отдельно от Next, и как локальный ESM loader, failure subscription и Retry проверяются иначе, чем domain logic в jsdom?
-5. Как future Yjs binding использует existing model и cleanup callback? Кто станет authority для content и как избежать перезаписи shared text starter code при reconnect?

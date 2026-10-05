@@ -102,14 +102,6 @@ Execution is browser-only, single-file and limited to snippets; there is no stdi
 
 PHASE 9 was complete when this report was written; PHASE 10 had not yet started at that point. PHASE 10 and PHASE 11 are now complete. Current overall project status is recorded in the README and PHASE 12 report.
 
-## 20. Five technical interviewer questions
-
-1. Why does `Promise.race()` not stop an infinite loop, and what does `Worker.terminate()` guarantee?
-2. How does reading Monaco's current model preserve the latest Y.Text snapshot while avoiding stale React state?
-3. What can CSP `connect-src 'none'` block, and why does allowing same-origin scripts for a compiler chunk leave a narrower network limitation?
-4. Why is a browser-reported `CodeRun` result not a trusted pass/fail verdict?
-5. What extra runtime and file semantics would be needed to support React TSX honestly?
-
 ## Verification results
 
 ### PASS

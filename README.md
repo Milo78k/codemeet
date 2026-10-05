@@ -124,18 +124,6 @@ For a short demo, avoid spending time on seed setup or database tooling. Keep th
 - Run history/Results preserve browser-reported source and output; offline run persistence is not queued. Results show descriptive events, not scores or private notes. The timeline is bounded to the latest 100 key events.
 - Production deployment, stronger authentication, hardened remote execution, durable Yjs storage, multi-replica realtime, private notes and trusted judging are future work—not current capabilities.
 
-## Portfolio / interview talking points
-
-- Collaborative editing with Yjs and question-scoped document lifecycle.
-- Awareness presence/cursors kept separate from persistent business data.
-- Session Events emitted after database commit, with reconnect refetch for canonical state.
-- Guest authorization and participant-scoped access enforced by the API.
-- Captured source snapshots executed in a terminable browser Worker.
-- Persisted, idempotent CodeRun history and Results derived from frozen interview snapshots.
-- Integration coverage for PostgreSQL transactions, authorization, concurrency and realtime transports, alongside frontend behavior tests.
-
-These points describe implemented behavior; they do not imply production authentication, hardened sandboxing, a trusted judge, or durable collaboration storage.
-
 ## Status and reports
 
-PHASE 0–11 are complete. PHASE 12 is the final portfolio-readiness polish; its final browser verification remains a manual step. The implementation and check results for each phase are recorded in [`docs/phase-12-report.md`](docs/phase-12-report.md) and the linked historical phase reports.
+PHASE 0–12 are complete. The implementation and check results for each phase are recorded in [`docs/phase-12-report.md`](docs/phase-12-report.md) and the linked historical phase reports.

@@ -128,11 +128,3 @@ Manual browser smoke: **PASS**. The user verified:
 ## 17. State when PHASE 10 closed
 
 When this report was written, PHASE 11 had not started. PHASE 11 is now complete and its Results page provides a descriptive summary and timeline. Trusted judging, server-side execution, hardened sandboxing, scoring, replay, Yjs persistence, production interviewer authentication, restore-old-run and AI review remain out of scope or future work.
-
-## 18. Technical interviewer questions
-
-1. Why is a browser-reported `SUCCESS` not a trusted judge verdict, and what server-side evidence would be required to make one?
-2. How does the captured Monaco/Y.Text string remain the same snapshot used by both Worker execution and persistence?
-3. Why can `CodeRun.id` serve as an idempotency key without a second uniqueness field?
-4. How do the interview/attachment lookup and participant-derived actor prevent cross-interview writes?
-5. Why are current Output and persisted Run History separate state, and what behavior follows when the save mutation fails offline?

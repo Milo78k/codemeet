@@ -1,14 +1,14 @@
-# CodeMeet — PHASE 12: Final Polish / Portfolio Readiness
+# CodeMeet — PHASE 12: Final Polish
 
 **Status: COMPLETE. Automated verification and FINAL MANUAL SMOKE: PASS.** This phase records final polish changes prompted by manual review. It does not change persisted business semantics or add a large new product capability.
 
 ## 1. Goal
 
-Make CodeMeet straightforward to set up, demonstrate in 5–10 minutes, understand architecturally, and discuss in a portfolio or technical interview. Keep the product and its documented trust boundaries honest.
+Make CodeMeet straightforward to set up, demonstrate in 5–10 minutes, and understand architecturally. Keep the product and its documented trust boundaries honest.
 
 ## 2. What was polished
 
-- Replaced the stale, phase-by-phase README with a concise current product overview, architecture summary, setup, routes, demo flow, limitations and portfolio talking points.
+- Replaced the stale, phase-by-phase README with a concise current product overview, architecture summary, setup, routes, demo flow and limitations.
 - Updated architecture status and added a compact source-of-truth/flow map for business state, collaboration, presence, Session Events, execution, CodeRun and Results.
 - Clarified historical PHASE 9–11 report wording so old “next phase” statements are explicitly dated to when those reports closed.
 - Reused the shared `formatDateTime` formatter for invite expiration and the Session header's Started date. These screens no longer maintain separate native/UTC formatters for the same kind of user-facing timestamp.
@@ -18,7 +18,7 @@ No migration, schema change, dependency, script, authentication or large product
 
 ## 3. Documentation changes
 
-- `README.md`: current capabilities, stack, local setup, URLs, seeded demo data, main routes, guided demo, security/trust limits, future work and portfolio discussion points.
+- `README.md`: current capabilities, stack, local setup, URLs, seeded demo data, main routes, guided demo, security/trust limits and future work.
 - `docs/architecture.md`: current state and concise flow table, corrected phase status and explicit future capability boundaries.
 - `docs/phase-9-report.md`, `docs/phase-10-report.md`, `docs/phase-11-report.md`: historical “next phase” text now explains that it described the state at phase close.
 - This report records PHASE 12 review outcomes and manual verification requirements.
@@ -129,30 +129,6 @@ PostgreSQL is the source of truth for business state; Session Events are ephemer
 ## 14. Future work
 
 Possible future capabilities, requiring their own security/product design, include production interviewer authentication, durable Yjs state, multi-replica realtime routing, private notes, trusted judging, hardened remote execution, scoring, replay, React preview and source/output retention controls. They are not part of PHASE 12.
-
-## 15. Portfolio talking points
-
-- Yjs collaboration with question-scoped room lifecycle and shared Monaco models.
-- Awareness identity, participant presence and remote cursor/selection transport.
-- Separation between collaborative document state and GraphQL/PostgreSQL business state.
-- Guest invite/session authorization with hashed bearer tokens and server-side membership checks.
-- Session Events published after commit, with canonical reconnect resync.
-- Captured immutable source snapshots, terminable Worker execution and clear trust semantics.
-- Idempotent persisted run history and Results derived from frozen `InterviewQuestion` snapshots.
-- PostgreSQL integration tests for ownership, transactions, concurrency and access control, plus frontend/realtime/Worker regression suites.
-
-## 16. Likely technical interview questions
-
-1. Why is a browser-reported `SUCCESS` different from a trusted judge verdict?
-2. How do Yjs and Awareness solve different problems, and why are both separate from GraphQL business state?
-3. What race does Serializable transaction retry address, and how do regression tests prove the write is atomic?
-4. Why are Session Events invalidation messages rather than the source of truth or a durable queue?
-5. How does canonical GraphQL refetch repair a missed event after reconnect?
-6. Which server-side checks prevent a guest participant from reading another interview's data?
-7. Why are invite/session bearer tokens stored as hashes, and where is the raw candidate session token held in the browser?
-8. What does Worker termination guarantee for an infinite loop, and what sandbox risks remain?
-9. How does a frozen `InterviewQuestion` snapshot keep Results stable if a reusable library question changes later?
-10. How would you evolve the system for durable Yjs state and multiple API replicas without conflating collaboration updates with business events?
 
 ## Verification
 
