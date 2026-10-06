@@ -46,11 +46,3 @@ API проверяет origin, room identity, статус Interview, attachment
 | Root `pnpm typecheck`                           | Turbo параллельно вызвал два Prisma generate, один завершился с известным EEXIST; API и web package typecheck прошли последовательно |
 
 Для browser smoke при недоступной PostgreSQL использован временный тестовый API на настоящем `createApiServer` и WS adapter, с in-memory Prisma fixture и двумя starter questions. Это проверяет реальный frontend, Monaco binding, GraphQL session flow и Yjs WebSocket, но не заменяет тест реальной схемы/миграций PostgreSQL. В обоих browser console встретилось по generic `Failed to load resource: 404`; в normal scenario иных browser errors или warnings не зарегистрировано. Endpoint конкретного resource по console text определить не удалось.
-
-## Вопросы для интервью
-
-1. Почему для одной строки исходного кода выбран `Y.Text`, а не `Y.Map` или `Y.XmlFragment`?
-2. Как Promise-based room initialization не допускает два server `Y.Doc` при одновременном первом подключении?
-3. Как Yjs state exchange объединяет offline updates после reconnect без last-write-wins?
-4. Где заканчивается проверка Origin/room state и начинается полноценная authorization?
-5. Почему live code находится в Yjs, а не в Apollo cache или GraphQL mutation на каждый keypress?

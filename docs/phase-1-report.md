@@ -192,11 +192,3 @@ Package: `eslint@9.39.5`. Installer: `WARN deprecated eslint@9.39.5`. Registry m
 PHASE 2: GraphQL Code Generator, frontend operations/typed documents, Apollo provider, filter-aware pagination/cache policies и подключение frontend к API. Эти зависимости и функциональность сейчас не добавлены.
 
 Auth.js/guest join, WebSocket/Yjs/Monaco/presence, code execution, notes/results UI, Redis/Kafka, отдельный realtime app и repository layer не реализовывались. Realtime будет модулем существующего `apps/api`.
-
-## 12. Вопросы технического интервьюера
-
-1. Зачем Serializable transactions вместе с conditional updates и unique constraints? Что повторяется при P2034 и почему event не дублируется?
-2. Как composite foreign keys запрещают чужую active question и CodeRun actor? Что произойдёт при delete referenced attachment?
-3. Как Prisma includes предотвращают текущий N+1 и при каких запросах потребуется DataLoader или выборка по selection set?
-4. Почему tests создают schema в отдельной database? Как гарантируется cleanup без удаления development data?
-5. Почему reusable Question требует snapshot на InterviewQuestion до сохранения итогов интервью и как это влияет на историю?

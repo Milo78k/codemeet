@@ -92,14 +92,6 @@ Fanout registry хранится в памяти единственного API 
 
 После review PHASE 8 дальнейший roadmap можно планировать отдельно. Эта фаза не включает CodeRunner/Sandpack/WebContainers и не начинает следующую продуктовую фазу.
 
-## 16. Пять вопросов технического интервьюера
-
-1. Почему event содержит invalidation, а не `activeQuestionId`, и как Apollo получает canonical state?
-2. Какая гарантия остаётся между SQL commit и ephemeral broadcast, и как reconnect чинит потерю?
-3. Почему Interview event channel и Question Yjs room имеют разные scopes?
-4. Как API проверяет candidate/interviewer access до подписки и изолирует разные interviews?
-5. Что требуется изменить, чтобы безопасно запустить несколько API replicas без потери fanout?
-
 ## Verification results
 
 ### PASS

@@ -86,14 +86,6 @@ Awareness живёт только пока API process держит комнат
 
 Следующая отдельная фаза по roadmap — browser code execution/runtime limits. PHASE 7 manual browser smoke пройден; следующая продуктовая фаза не начиналась.
 
-## 20. Пять вопросов интервьюера
-
-1. Как сервер связывает client-controlled Awareness с уже авторизованной participant identity?
-2. Почему remote selection стоит передавать в Yjs как relative positions, а не как обычные line/column координаты?
-3. Как provider reconnect и clock ordering предотвращают stale Awareness state после возврата в Question room?
-4. Почему BroadcastChannel отключён при авторизованной WebSocket архитектуре?
-5. Чем ephemeral Awareness отличается от Y.Doc persistence и GraphQL business state?
-
 ## Проверки
 
 ### PASS
